@@ -390,10 +390,15 @@
                     <i data-lucide="settings" class="w-5 h-5 text-indigo-500"></i>
                     系統連線設定 (連結你的 Google 試算表)
                 </h2>
-                <p class="text-sm text-slate-400 leading-relaxed">
-                    預設為 <strong class="text-indigo-400">DEMO 測試模式</strong>，我們將測試數據儲存在您瀏覽器的 LocalStorage 中。
-                    如果您想要無縫連結您在 Google 雲端建立的試算表（享受免費自動報價更新），請按照下方步驟完成對接！
-                </p>
+                <div class="text-sm text-slate-400 space-y-2 leading-relaxed">
+                    <p>
+                        本頁提供將網頁前端與後端 Google Sheets 橋接的配置。
+                    </p>
+                    <div id="central-config-indicator" class="hidden bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg p-3 text-xs flex items-center gap-2">
+                        <i data-lucide="shield-check" class="w-4 h-4"></i>
+                        <span><strong>系統已載入程式碼中央管理的「預設網址」！</strong> 您與您的家人可以直接開啟此網頁運作。如有需要，您依然可以在下方輸入個人臨時網址進行覆蓋。</span>
+                    </div>
+                </div>
 
                 <!-- 設定欄位 -->
                 <div class="pt-4 border-t border-slate-800 space-y-4">
@@ -681,6 +686,12 @@ function getSheetData(sheet) {
 
     <!-- ==================== 核心 JavaScript ==================== -->
     <script>
+        // =========================================================================
+        // ⚙️ 統一雲端連線設定：在此處貼上您的 Google Apps Script Web App URL。
+        // 當您將 index.html 分發給老婆或其他設備時，所有人打開皆能直接使用，完全不需再次設定！
+        // =========================================================================
+        const DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbwTjUaPPQ6w_w09PAkKXotR3MdATumvNQTy2N-sc7xBYdN5ojT659NVXQYtlyXJa90Z/exec"; // 👈 填入您的 Web App 網址 (https://script.google.com/macros/s/.../exec)
+
         // --- 1. 初始化 Mock / 預設數據 (DEMO 模式使用) ---
         const DEFAULT_CASH_FLOW = [
             { id: "FLOW_001", date: "2026-06-01", contributor: "老公", type: "存入", stock_code: "", amount: 100000, note: "6月份固定投資入金" },
@@ -732,21 +743,18 @@ function getSheetData(sheet) {
         // 台北時區精準格式化器 (僅顯示 YYYY-MM-DD，絕不漏日跳日)
         function formatDateTaipei(dateInput) {
             if (!dateInput) return "-";
-            // 已經是乾淨的 YYYY-MM-DD 格式，直接回傳
             if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput.trim())) {
                 return dateInput.trim();
             }
             try {
                 const date = new Date(dateInput);
                 if (isNaN(date.getTime())) {
-                    // 若是未知格式，嘗試正則抓取
                     const match = String(dateInput).match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
                     if (match) {
                         return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
                     }
                     return String(dateInput);
                 }
-                // 使用台北時區進行格式化
                 const formatter = new Intl.DateTimeFormat('zh-TW', {
                     timeZone: 'Asia/Taipei',
                     year: 'numeric',
@@ -761,9 +769,14 @@ function getSheetData(sheet) {
 
         // --- 2. 系統啟動與數據整合載入 ---
         window.onload = async function() {
-            // 讀取 LocalStorage 中的 API 網址
-            state.apiUrl = localStorage.getItem("sheet_api_url") || "";
+            // 優先讀取 LocalStorage 自訂覆蓋，若無則採用全域預設之 DEFAULT_API_URL
+            state.apiUrl = localStorage.getItem("sheet_api_url") || DEFAULT_API_URL;
             
+            // 如果成功讀取到了程式碼中宣告的預設 API 網址，顯示提示綠條
+            if (DEFAULT_API_URL && !localStorage.getItem("sheet_api_url")) {
+                document.getElementById('central-config-indicator').classList.remove('hidden');
+            }
+
             // 設定今日日期預設值 (台北時區)
             const todayStr = formatDateTaipei(new Date());
             document.getElementById('cf-date').value = todayStr;
@@ -777,7 +790,6 @@ function getSheetData(sheet) {
                 document.getElementById('settings-api-url').value = state.apiUrl;
             } else {
                 state.isDemo = true;
-                // 從 LocalStorage 載入 Demo 變更
                 if (!localStorage.getItem('demo_cash_flow')) {
                     localStorage.setItem('demo_cash_flow', JSON.stringify(DEFAULT_CASH_FLOW));
                     localStorage.setItem('demo_transactions', JSON.stringify(DEFAULT_TRANSACTIONS));
@@ -796,36 +808,30 @@ function getSheetData(sheet) {
 
             try {
                 if (state.isDemo || !state.apiUrl) {
-                    // DEMO 模式
                     state.cashFlow = JSON.parse(localStorage.getItem('demo_cash_flow')) || DEFAULT_CASH_FLOW;
                     state.transactions = JSON.parse(localStorage.getItem('demo_transactions')) || DEFAULT_TRANSACTIONS;
                     calculateInventoryFromTransactions();
                     document.getElementById('connection-error-banner').classList.add('hidden');
                 } else {
-                    // 雲端連線模式
                     const response = await fetch(state.apiUrl, { redirect: "follow" });
                     if (!response.ok) throw new Error(`HTTP 錯誤! 狀態碼: ${response.status}`);
                     
                     const data = await response.json();
                     
-                    // 解析是否拿到正確 JSON
                     if (!data || (!data.cashFlow && !data.transactions && !data.inventory)) {
                         throw new Error("API 回傳結構不正確。請確認 Google 試算表工作表分頁命名為 users_cash_flow, daily_transactions, stock_inventory 且腳本複製完全。");
                     }
 
-                    // 成功串接數據
                     state.cashFlow = (data.cashFlow || []).filter(item => item.id);
                     state.transactions = (data.transactions || []).filter(item => item.id);
                     state.inventory = (data.inventory || []).filter(item => item.stock_code);
                     state.lastError = "";
 
-                    // 更新 UI 指示器
                     document.getElementById('connection-badge').className = "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
                     document.getElementById('connection-badge').innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span> 雲端連線成功`;
                     document.getElementById('connection-error-banner').classList.add('hidden');
                 }
 
-                // 渲染畫面
                 renderDashboard();
                 renderCashFlowTable();
                 renderTransactionsTable();
@@ -836,7 +842,6 @@ function getSheetData(sheet) {
                 console.error("同步報錯:", error);
                 state.lastError = error.toString();
                 
-                // 啟動安全防禦，切回 Demo 並跳出黃色警報條
                 state.isDemo = true;
                 state.cashFlow = JSON.parse(localStorage.getItem('demo_cash_flow')) || DEFAULT_CASH_FLOW;
                 state.transactions = JSON.parse(localStorage.getItem('demo_transactions')) || DEFAULT_TRANSACTIONS;
@@ -847,7 +852,6 @@ function getSheetData(sheet) {
                 renderTransactionsTable();
                 renderInventoryTable();
 
-                // 顯示連線錯誤警告
                 document.getElementById('connection-error-banner').classList.remove('hidden');
                 document.getElementById('diagnostic-error-summary').textContent = error.message || "CORS/網路阻擋";
                 document.getElementById('diagnostic-raw-error').textContent = `${error.toString()}\n\n時間: 2026-06-08\n連線網址: ${state.apiUrl}`;
@@ -861,12 +865,10 @@ function getSheetData(sheet) {
             }
         }
 
-        // 診斷視窗控制
         function openDiagnosticModal() {
             openModal('diagnostic-modal');
         }
 
-        // 離線模式：前端模擬庫存運算
         function calculateInventoryFromTransactions() {
             const invMap = {};
             state.transactions.forEach(t => {
@@ -1014,7 +1016,6 @@ function getSheetData(sheet) {
             lucide.createIcons();
         }
 
-        // 渲染現金流水帳 Table (新增 ID 欄位與時區處理)
         function renderCashFlowTable() {
             const body = document.getElementById('cashflow-table-body');
             let balance = 0;
@@ -1072,7 +1073,6 @@ function getSheetData(sheet) {
             }).join('');
         }
 
-        // 渲染交易紀錄 Table (優化時區格式、金額小數點、移除經手人)
         function renderTransactionsTable() {
             const body = document.getElementById('transactions-table-body');
             const sorted = [...state.transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -1101,7 +1101,6 @@ function getSheetData(sheet) {
             }).join('');
         }
 
-        // 渲染持股庫存 Table (買入成本與目前市價強制呈現2位小數點)
         function renderInventoryTable() {
             const body = document.getElementById('inventory-table-body');
             
@@ -1131,7 +1130,6 @@ function getSheetData(sheet) {
             }).join('');
         }
 
-        // --- 5. 出資與資產比重圖表渲染 (Chart.js) (調整共同存款為琥珀金、更名交割現金為現金) ---
         function renderContributionChart(husband, wife, joint) {
             const ctx = document.getElementById('contributionChart').getContext('2d');
             const total = husband + wife + joint;
