@@ -406,10 +406,11 @@
                     <div>
                         <label class="block text-sm font-medium text-slate-300 mb-1.5">Google Apps Script Web App URL</label>
                         <input type="text" id="settings-api-url" placeholder="請貼上部署後取得的 Web App URL (以 https://script.google.com/macros/s/ 開頭)" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition">
-                        <!-- 網址警告提示條 -->
+                        
+                        <!-- 網址警告提示條 (智慧格式檢查) -->
                         <div id="url-warning" class="hidden mt-2 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-lg p-3 text-xs flex items-center gap-2">
                             <i data-lucide="alert-circle" class="w-4 h-4 shrink-0"></i>
-                            <span>偵測到這可能是<strong>編輯器網址 (包含 /edit 或 /home)</strong>！請確認您貼上的是部署後產生的 <strong>網頁應用程式 URL</strong> (必須含有 <code>/macros/s/.../exec</code>).</span>
+                            <span id="url-warning-text">偵測到這可能是編輯器網址！請確認您貼上的是部署後產生的網頁應用程式 URL。</span>
                         </div>
                     </div>
 
@@ -653,11 +654,10 @@ function getSheetData(sheet) {
                     <h4 class="font-bold text-slate-200">💡 100% 排除錯誤步驟：</h4>
                     
                     <div class="bg-slate-950 p-3.5 rounded-lg border border-slate-800 space-y-2">
-                        <p class="text-amber-400 font-bold text-xs">【可能原因 1】您複製錯了網址（最常見）</p>
+                        <p class="text-amber-400 font-bold text-xs">【可能原因 1】您的網址在複製時被截斷（最常見）</p>
                         <p class="text-xs text-slate-400 leading-relaxed">
-                            請確認設定裡的 URL 是 <strong>「部署網頁應用程式」</strong> 後取得的，而不是上方瀏覽器的編輯器網址。<br>
-                            👉 <span class="text-emerald-400 font-semibold">正確範例：</span> <code>https://script.google.com/macros/s/AKfycb.../exec</code><br>
-                            👉 <span class="text-rose-400 font-semibold">錯誤範例：</span> <code>https://script.google.com/home/projects/.../edit</code>
+                            Google Apps Script 的部署 ID 固定為 **56 個字元**。如果網頁偵測到您的網址太短（例如只有 48 個字元），Google 就會引導您到錯誤頁面或拒絕連線，導致瀏覽器跳出 <code>Failed to fetch</code> 錯誤。<br>
+                            👉 <span class="text-emerald-400 font-semibold">正確範例格式：</span> <code>https://script.google.com/macros/s/AKfycb...[完整56個字元].../exec</code>
                         </p>
                     </div>
 
@@ -702,7 +702,7 @@ function getSheetData(sheet) {
         // ⚙️ 統一雲端連線設定：在此處貼上您的 Google Apps Script Web App URL。
         // 當您將 index.html 分發給老婆或其他設備時，所有人打開皆能直接使用，完全不需再次設定！
         // =========================================================================
-        const DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbwTjUaPPQ6w_w09PAkKXotR3MdATumvNQTy2N-sc7xBYdN5ojT659NVXQYtlyXJa90Z/exec"; // 👈 填入您的 Web App 網址 (https://script.google.com/macros/s/.../exec)
+        const DEFAULT_API_URL = ""; // 👈 填入您的 Web App 完整網址 (包含完整的 56 字元部署 ID)
 
         // --- 1. 初始化 Mock / 預設數據 (DEMO 模式使用) ---
         const DEFAULT_CASH_FLOW = [
@@ -736,15 +736,42 @@ function getSheetData(sheet) {
         let contributionChartInstance = null;
         let assetAllocationChartInstance = null;
 
-        // 監聽網址欄位輸入，進行智慧防呆
+        // 智慧型網址規格驗證器 (Tech Lead 專防複製錯誤)
+        function validateGasUrl(url) {
+            if (!url) return { valid: false, reason: "尚未輸入網址" };
+            const cleanUrl = url.trim();
+            if (!cleanUrl.startsWith("https://script.google.com/macros/s/")) {
+                return { valid: false, reason: "網址開頭不正確！必須是 https://script.google.com/macros/s/ 開頭。" };
+            }
+            const parts = cleanUrl.split("/macros/s/");
+            if (parts.length < 2) return { valid: false, reason: "無法解析網址中的部署 ID 區段。" };
+            
+            const idPart = parts[1].split("/")[0];
+            if (idPart.length < 56) {
+                return { 
+                    valid: false, 
+                    reason: `偵測到部署 ID 只有 ${idPart.length} 個字元（一般標準應為 56 個字元）！這 99% 是複製貼上時最後幾個字漏掉了。請重新開啟 Apps Script 部署視窗，完整複製完整的 Web App 網址。` 
+                };
+            }
+            if (!cleanUrl.endsWith("/exec")) {
+                return { valid: false, reason: "網頁應用程式網址必須以 /exec 結尾！" };
+            }
+            return { valid: true };
+        }
+
+        // 監聽網址欄位輸入，進行智慧防呆提示
         document.addEventListener("DOMContentLoaded", () => {
             const apiInput = document.getElementById("settings-api-url");
             if (apiInput) {
                 apiInput.addEventListener("input", (e) => {
                     const url = e.target.value.trim();
                     const warning = document.getElementById("url-warning");
-                    if (url && (url.includes("/edit") || url.includes("/home") || !url.includes("/exec"))) {
+                    const validation = validateGasUrl(url);
+                    
+                    if (url && !validation.valid) {
                         warning.classList.remove("hidden");
+                        warning.innerHTML = `<i data-lucide="alert-circle" class="w-4 h-4 shrink-0"></i><span>${validation.reason}</span>`;
+                        lucide.createIcons();
                     } else {
                         warning.classList.add("hidden");
                     }
@@ -777,25 +804,6 @@ function getSheetData(sheet) {
             } catch (e) {
                 return String(dateInput);
             }
-        }
-
-        // 手機端點擊狀態燈觸發連線狀態 Tooltip
-        function showConnectionStatusToast() {
-            let statusMessage = "連線狀態：";
-            let iconName = "alert-circle";
-            let iconColor = "text-amber-400";
-
-            if (state.isDemo) {
-                statusMessage += "DEMO 測試預覽模式 (無雲端連線)";
-            } else if (state.lastError) {
-                statusMessage += "雲端連線失敗，已自動降級回離線模式";
-                iconColor = "text-red-400";
-            } else {
-                statusMessage += "Google 試算表同步連線成功！";
-                iconColor = "text-emerald-400";
-                iconName = "check-circle";
-            }
-            showToast(statusMessage, iconName, iconColor);
         }
 
         // --- 2. 系統啟動與數據整合載入 ---
@@ -853,6 +861,12 @@ function getSheetData(sheet) {
                     calculateInventoryFromTransactions();
                     document.getElementById('connection-error-banner').classList.add('hidden');
                 } else {
+                    // 先行驗證網址結構，防禦並在前端攔截無效的請求
+                    const validation = validateGasUrl(state.apiUrl);
+                    if (!validation.valid) {
+                        throw new Error(`網址格式錯誤：${validation.reason}`);
+                    }
+
                     const response = await fetch(state.apiUrl, { redirect: "follow" });
                     if (!response.ok) throw new Error(`HTTP 錯誤! 狀態碼: ${response.status}`);
                     
@@ -897,8 +911,8 @@ function getSheetData(sheet) {
                 renderInventoryTable();
 
                 document.getElementById('connection-error-banner').classList.remove('hidden');
-                document.getElementById('diagnostic-error-summary').textContent = error.message || "CORS/網路阻擋";
-                document.getElementById('diagnostic-raw-error').textContent = `${error.toString()}\n\n時間: 2026-06-08\n連線網址: ${state.apiUrl}`;
+                document.getElementById('diagnostic-error-summary').textContent = "連線失敗 (CORS或網址部署錯誤)";
+                document.getElementById('diagnostic-raw-error').textContent = `${error.toString()}\n\n時間: 2026-06-08\n連線網址: ${state.apiUrl}\n\n【排錯關鍵提示】:\n如果此處拋出 Failed to fetch 且您的網址長度非標準56字元ID，請回 Cloud 控制台確認是否完整複製了 /exec 結尾的 Web App URL。`;
                 
                 const badge = document.getElementById('connection-badge');
                 badge.className = "cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-2.5 sm:py-0.5 rounded-full text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20 transition-all duration-200 active:scale-95";
@@ -1022,7 +1036,14 @@ function getSheetData(sheet) {
 
             state.inventory.forEach(inv => {
                 totalStockValue += Number(inv.market_value || 0);
-                totalStockCost += Number(inv.total_investment || 0);
+                
+                // 🚨 關鍵自動容錯與動態本金計算：
+                // 如果試算表欄位 total_investment 不存在（回傳為 undefined 或空），
+                // 則自動使用（平均買入成本 avg_cost * 庫存股數 total_shares）作為該持股的累計投入本金！
+                // 這樣能徹底解決「整體報酬率」因缺少累計投入本金欄位而顯示 0.00% 的 Bug。
+                const cost = Number(inv.total_investment) || (Number(inv.avg_cost || 0) * Number(inv.total_shares || 0));
+                totalStockCost += cost;
+                
                 totalUnrealizedPnL += Number(inv.unrealized_pnl || 0);
             });
 
@@ -1519,8 +1540,10 @@ function getSheetData(sheet) {
             const wifeInput = document.getElementById('settings-wife-name').value.trim();
 
             if (url) {
-                if (url.includes("/edit") || url.includes("/home") || !url.includes("/exec")) {
-                    showToast("警告：偵測到您貼上的是編輯器網址，連線將必定失敗！", "alert-triangle", "text-amber-400");
+                const validation = validateGasUrl(url);
+                if (!validation.valid) {
+                    showToast("網址驗證失敗：" + validation.reason, "alert-triangle", "text-rose-400");
+                    return; // 阻擋儲存，防禦性開發
                 }
                 localStorage.setItem("sheet_api_url", url);
             }
@@ -1535,6 +1558,7 @@ function getSheetData(sheet) {
             }, 1500);
         }
 
+        // 智慧重置
         function resetToDemo() {
             localStorage.removeItem("sheet_api_url");
             localStorage.removeItem("demo_cash_flow");
@@ -1559,6 +1583,7 @@ function getSheetData(sheet) {
         }
 
         // --- 9. 格式化工具 ---
+        // 智慧轉型與小數格式化
         function formatNumber(num, decimals = 0) {
             return Number(num || 0).toLocaleString('zh-TW', { 
                 minimumFractionDigits: decimals,
