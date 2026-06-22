@@ -213,7 +213,7 @@
                             <i data-lucide="pie-chart" class="w-4 h-4 text-indigo-400"></i>
                             雙方出資比例與金額
                         </h4>
-                        <p class="text-xs text-slate-400 mt-1">依據歷史上「存入」共同帳戶的流水記錄加總</p>
+                        <p class="text-xs text-slate-400 mt-1">依據歷史上「存入」共同帳戶 the 流水記錄加總</p>
                     </div>
                     <div class="my-6 flex justify-center">
                         <div class="w-48 h-48 relative">
@@ -631,7 +631,7 @@ function getSheetData(sheet) {
     </div>
 
     <!-- ==================== 彈出視窗 3: 實時連線診斷面板 ==================== -->
-    <div id="diagnostic-modal" class="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div id="diagnostic-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl shadow-xl overflow-hidden">
             <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
                 <h3 class="font-bold text-lg flex items-center gap-2 text-amber-400">
@@ -657,7 +657,7 @@ function getSheetData(sheet) {
                         <p class="text-amber-400 font-bold text-xs">【可能原因 1】您的網址在複製時被截斷（最常見）</p>
                         <p class="text-xs text-slate-400 leading-relaxed">
                             Google Apps Script 的部署 ID 固定為 **56 個字元**。如果網頁偵測到您的網址太短（例如只有 48 個字元），Google 就會引導您到錯誤頁面或拒絕連線，導致瀏覽器跳出 <code>Failed to fetch</code> 錯誤。<br>
-                            👉 <span class="text-emerald-400 font-semibold">正確範例格式：</span> <code>https://script.google.com/macros/s/AKfycb...[完整56個字元].../exec</code>
+                            👉 <span class="text-emerald-400 font-semibold">Correct template format:</span> <code>https://script.google.com/macros/s/AKfycb...[完整56個字元].../exec</code>
                         </p>
                     </div>
 
@@ -804,6 +804,25 @@ function getSheetData(sheet) {
             } catch (e) {
                 return String(dateInput);
             }
+        }
+
+        // 手機端點擊狀態燈觸發連線狀態 Tooltip
+        function showConnectionStatusToast() {
+            let statusMessage = "連線狀態：";
+            let iconName = "alert-circle";
+            let iconColor = "text-amber-400";
+
+            if (state.isDemo) {
+                statusMessage += "DEMO 測試預覽模式 (無雲端連線)";
+            } else if (state.lastError) {
+                statusMessage += "雲端連線失敗，已自動降級回離線模式";
+                iconColor = "text-red-400";
+            } else {
+                statusMessage += "Google 試算表同步連線成功！";
+                iconColor = "text-emerald-400";
+                iconName = "check-circle";
+            }
+            showToast(statusMessage, iconName, iconColor);
         }
 
         // --- 2. 系統啟動與數據整合載入 ---
@@ -1204,7 +1223,7 @@ function getSheetData(sheet) {
             }).join('');
         }
 
-        // 渲染持股庫存 Table
+        // 渲染持股庫存 Table (買入成本與目前市價強制呈現2位小數點)
         function renderInventoryTable() {
             const body = document.getElementById('inventory-table-body');
             
@@ -1219,12 +1238,16 @@ function getSheetData(sheet) {
                 const pnlClass = pnl >= 0 ? 'text-red-500 font-bold' : 'text-emerald-400 font-bold';
                 const pnlPrefix = pnl >= 0 ? '+' : '';
 
+                // 🚨 智慧自動推算累計投入本金 (容錯與自動計算)：
+                // 讀取 Google Sheets 時若該欄位沒有值，自動由 平均買入成本 * 庫存股數 算出
+                const calculatedCost = Number(inv.total_investment) || (Number(inv.avg_cost || 0) * Number(inv.total_shares || 0));
+
                 return `
                     <tr class="hover:bg-slate-900/50">
                         <td class="px-6 py-4 font-bold text-slate-200">${inv.stock_code} <span class="text-xs text-slate-400 font-normal block">${inv.stock_name || '台股'}</span></td>
                         <td class="px-6 py-4 text-right font-mono">${formatNumber(inv.total_shares)} 股</td>
                         <td class="px-6 py-4 text-right font-mono text-slate-400">$${formatNumber(inv.avg_cost, 2)}</td>
-                        <td class="px-6 py-4 text-right font-mono text-slate-300">$${formatNumber(inv.total_investment)}</td>
+                        <td class="px-6 py-4 text-right font-mono text-slate-300">$${formatNumber(calculatedCost)}</td>
                         <td class="px-6 py-4 text-right font-mono font-bold text-slate-100">$${formatNumber(inv.current_price, 2)}</td>
                         <td class="px-6 py-4 text-right font-mono font-bold text-slate-100">$${formatNumber(inv.market_value)}</td>
                         <td class="px-6 py-4 text-right font-mono ${pnlClass}">${pnlPrefix}$${formatNumber(pnl)}</td>
@@ -1343,6 +1366,7 @@ function getSheetData(sheet) {
         }
 
         // --- 6. 介面 Tabs 操作與彈窗機制 ---
+        // 介面控制
         function toggleTab(tabId) {
             document.getElementById('tab-content-dashboard').classList.add('hidden');
             document.getElementById('tab-content-cash-flow').classList.add('hidden');
@@ -1365,7 +1389,6 @@ function getSheetData(sheet) {
             }
         }
 
-        // 彈窗與關閉
         function openModal(modalId) {
             document.getElementById(modalId).classList.remove('hidden');
         }
