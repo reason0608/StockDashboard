@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>雙人集資投資戰情室</title>
+    <title>世界的至寶投資囉!</title>
     <!-- Tailwind CSS (CDN) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -97,7 +97,7 @@
                     <i data-lucide="line-chart" class="w-6 h-6"></i>
                 </div>
                 <div>
-                    <h1 class="text-base sm:text-lg font-bold tracking-tight">我們的集資投資戰情室</h1>
+                    <h1 class="text-base sm:text-lg font-bold tracking-tight">世界的至寶投資囉!</h1>
                     <p class="text-[10px] sm:text-xs text-slate-400 font-mono">台股漲跌色標：紅(賺) / 綠(賠) | 台北時區同步</p>
                 </div>
             </div>
@@ -1022,17 +1022,28 @@ function getSheetData(sheet) {
                 `;
             }
 
-            let cashBalance = 0;
+            // 依日期與 ID 排序流水帳，確保能夠準確鎖定最後一筆
+            const sortedFlows = [...state.cashFlow].sort((a, b) => {
+                const dateDiff = new Date(a.date) - new Date(b.date);
+                if (dateDiff !== 0) return dateDiff;
+                const idA = Number(String(a.id).replace(/\D/g, '')) || 0;
+                const idB = Number(String(b.id).replace(/\D/g, '')) || 0;
+                return idA - idB;
+            });
+
+            let calculatedCash = 0;
             let totalContributed = 0;
             let husbandContributed = 0;
             let wifeContributed = 0;
             let jointContributed = 0;
             let totalDividends = 0;
 
-            state.cashFlow.forEach(flow => {
+            sortedFlows.forEach(flow => {
                 const amt = Number(flow.amount || 0);
-                if (flow.type === "存入") {
-                    cashBalance += amt;
+                const typeStr = String(flow.type || "");
+
+                if (typeStr === "存入" || typeStr.includes("存入")) {
+                    calculatedCash += amt;
                     totalContributed += amt;
                     if (flow.contributor === husbandName) {
                         husbandContributed += amt;
@@ -1041,13 +1052,26 @@ function getSheetData(sheet) {
                     } else {
                         jointContributed += amt;
                     }
-                } else if (flow.type === "股息流入") {
-                    cashBalance += amt;
+                } else if (typeStr === "股息流入" || typeStr.includes("股息") || typeStr.includes("配息")) {
+                    calculatedCash += amt;
                     totalDividends += amt;
-                } else if (flow.type === "證券交割支出") {
-                    cashBalance -= amt;
+                } else if (typeStr === "證券交割支出" || typeStr.includes("支出") || typeStr.includes("交割")) {
+                    calculatedCash -= Math.abs(amt);
+                } else if (typeStr === "活存利息" || typeStr.includes("利息")) {
+                    // 活存利息收入
+                    calculatedCash += amt;
+                } else {
+                    // 其他自訂收支項目
+                    calculatedCash += amt;
                 }
             });
+
+            // 🚨 關鍵修正：優先使用試算表最新一筆的 account_balance 作為 Single Source of Truth！
+            // 如此一來不論試算表中有任何自訂扣款、退稅或活存利息，看板金額必定與流水帳 100% 相符
+            const latestFlow = sortedFlows[sortedFlows.length - 1];
+            const cashBalance = (latestFlow && latestFlow.account_balance !== undefined && latestFlow.account_balance !== "")
+                ? Number(latestFlow.account_balance)
+                : calculatedCash;
 
             let totalStockValue = 0;
             let totalStockCost = 0;
@@ -1056,10 +1080,7 @@ function getSheetData(sheet) {
             state.inventory.forEach(inv => {
                 totalStockValue += Number(inv.market_value || 0);
                 
-                // 🚨 關鍵自動容錯與動態本金計算：
-                // 如果試算表欄位 total_investment 不存在（回傳為 undefined 或空），
-                // 則自動使用（平均買入成本 avg_cost * 庫存股數 total_shares）作為該持股的累計投入本金！
-                // 這樣能徹底解決「整體報酬率」因缺少累計投入本金欄位而顯示 0.00% 的 Bug。
+                // 關鍵自動容錯與動態本金計算
                 const cost = Number(inv.total_investment) || (Number(inv.avg_cost || 0) * Number(inv.total_shares || 0));
                 totalStockCost += cost;
                 
@@ -1141,14 +1162,23 @@ function getSheetData(sheet) {
         function renderCashFlowTable() {
             const body = document.getElementById('cashflow-table-body');
             let balance = 0;
-            const sortedFlows = [...state.cashFlow].sort((a, b) => new Date(a.date) - new Date(b.date));
+            const sortedFlows = [...state.cashFlow].sort((a, b) => {
+                const dateDiff = new Date(a.date) - new Date(b.date);
+                if (dateDiff !== 0) return dateDiff;
+                const idA = Number(String(a.id).replace(/\D/g, '')) || 0;
+                const idB = Number(String(b.id).replace(/\D/g, '')) || 0;
+                return idA - idB;
+            });
             
             const renderedFlows = sortedFlows.map(flow => {
                 const amt = Number(flow.amount || 0);
-                if (flow.type === "存入" || flow.type === "股息流入") {
+                const typeStr = String(flow.type || "");
+                if (typeStr.includes("存入") || typeStr.includes("股息") || typeStr.includes("利息") || typeStr.includes("收入")) {
                     balance += amt;
-                } else if (flow.type === "證券交割支出") {
-                    balance -= amt;
+                } else if (typeStr.includes("支出") || typeStr.includes("交割")) {
+                    balance -= Math.abs(amt);
+                } else {
+                    balance += amt;
                 }
                 return { ...flow, calculatedBalance: balance };
             }).reverse();
@@ -1161,12 +1191,14 @@ function getSheetData(sheet) {
             body.innerHTML = renderedFlows.map(flow => {
                 let typeClass = "";
                 let amtPrefix = "";
-                if (flow.type === "存入") {
+                const typeStr = String(flow.type || "");
+
+                if (typeStr.includes("存入")) {
                     typeClass = "bg-indigo-500/10 text-indigo-400 border-indigo-500/20";
                     amtPrefix = "+";
-                } else if (flow.type === "股息流入") {
+                } else if (typeStr.includes("股息") || typeStr.includes("利息")) {
                     typeClass = "bg-amber-500/10 text-amber-400 border-amber-500/20";
-                    amtPrefix = "+";
+                    amtPrefix = Number(flow.amount) >= 0 ? "+" : "";
                 } else {
                     typeClass = "bg-slate-800 text-slate-400 border-slate-700";
                     amtPrefix = "-";
@@ -1185,7 +1217,7 @@ function getSheetData(sheet) {
                             </span>
                         </td>
                         <td class="px-6 py-4 text-slate-400 font-mono">${flow.stock_code || '-'}</td>
-                        <td class="px-6 py-4 text-right font-mono font-bold ${amtPrefix === '+' ? 'text-red-400' : 'text-slate-300'}">
+                        <td class="px-6 py-4 text-right font-mono font-bold ${amtPrefix === '+' || Number(flow.amount) >= 0 ? 'text-red-400' : 'text-slate-300'}">
                             ${amtPrefix}$${formatNumber(flow.amount)}
                         </td>
                         <td class="px-6 py-4 text-right font-mono text-slate-200 font-semibold">$${formatNumber(finalBalance)}</td>
