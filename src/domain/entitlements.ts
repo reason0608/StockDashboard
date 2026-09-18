@@ -37,13 +37,14 @@ export function eligibleShares(transactions: Transaction[], event: Dividend, tod
   return { shares: total, error: null };
 }
 
-/** 扣除單次匯費；未設定費用保留未知，不能假設免收費。 */
-export function netDividend(gross: number | null, fee: number | undefined): number | null {
+export const DEFAULT_REMITTANCE_FEE = 10;
+
+/** 扣除固定單次匯費；金額不足匯費時淨額以零計。 */
+export function netDividend(gross: number | null, fee: number = DEFAULT_REMITTANCE_FEE): number | null {
   if (gross === null) return null;
   if (gross === 0) return 0;
-  if (fee === undefined) return null;
-  if (!Number.isFinite(fee) || fee < 0 || Math.round(fee * 100) !== fee * 100 || fee > gross) throw new Error('匯費須為非負金額、最多兩位小數，且不得超過股息。');
-  return Math.round((gross - fee) * 100) / 100;
+  if (!Number.isFinite(fee) || fee < 0 || Math.round(fee * 100) !== fee * 100) throw new Error('匯費須為非負金額且最多兩位小數。');
+  return Math.max(0, Math.round((gross - fee) * 100) / 100);
 }
 
 /** 已入帳採當時快照；尚未入帳隨交易紀錄更新，舊手動股數不覆蓋交易推算。 */
@@ -72,7 +73,7 @@ export function realizedDividends(flows: CashFlow[], ledger: Ledger): number {
   let total = 0;
   for (const c of Object.values(ledger.confirmations)) {
     if (!c.received) continue;
-    const net = netDividend(estimateDividend(c.shares, c.event.cashPerShare), c.remittanceFee);
+    const net = netDividend(estimateDividend(c.shares, c.event.cashPerShare));
     if (net === null) continue;
     if (c.cashFlowId) excluded.add(c.cashFlowId);
     else {

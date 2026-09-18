@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { eligibleShares, netDividend, realizedDividends, tradingDate } from '../src/domain/entitlements';
+import { DEFAULT_REMITTANCE_FEE, eligibleShares, netDividend, realizedDividends, tradingDate } from '../src/domain/entitlements';
 import type { Dividend, Ledger } from '../src/domain/dividends';
 
 const event: Dividend = { id: '2330:2026-06-11', stockCode: '2330', stockName: '台積電', exDate: '2026-06-11', paymentDate: '2026-07-09', cashPerShare: 6, source: 'test', sourceUrl: 'https://example.com/', updatedAt: '2026-09-18T00:00:00Z' };
@@ -29,10 +29,11 @@ describe('每日交易紀錄串聯除息股數', () => {
 });
 
 describe('匯費與已落袋股息', () => {
-  it('淨額為稅前總額扣匯費，未填費用保持未知', () => {
+  it('淨額預設扣除固定匯費，且最低為零', () => {
+    expect(DEFAULT_REMITTANCE_FEE).toBe(10);
     expect(netDividend(1200, 10)).toBe(1190);
-    expect(netDividend(1200, undefined)).toBeNull();
-    expect(() => netDividend(100, 101)).toThrow();
+    expect(netDividend(1200, undefined)).toBe(1190);
+    expect(netDividend(5)).toBe(0);
     expect(() => netDividend(100, 0.001)).toThrow();
   });
   it('同股票同發放日唯一現金流水會去重', () => {
