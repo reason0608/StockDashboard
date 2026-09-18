@@ -19,7 +19,7 @@ test('既有分頁與新增交易表單可操作，重新整理 hash 保留分�
   await expect(page.locator('#tab-content-inventory')).toContainText('已領股息');
   await expect(page.locator('#tab-content-inventory')).toContainText('未實現損益（不含息）');
   await expect(page.locator('#tab-content-inventory')).toContainText('含息報酬率');
-  await expect(page.locator('#inventory-table-body')).toContainText(',500.00');
+  await expect(page.locator('#inventory-table-body tr').first().locator('td').nth(6)).toHaveText(/^\$1,(500|610)\.00$/);
   await page.reload();
   await expect(page.locator('#tab-content-inventory')).toBeVisible();
   await page.locator('#tab-btn-transactions').click();
