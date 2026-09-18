@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { state } from '../legacy/dashboard.js';
-import { dividendStatus, estimateDividend, parseLedger, relevantEvents, taipeiToday, type Dividend, type Feed, type Holding, type Ledger } from '../domain/dividends';
+import { estimateDividend, parseLedger, relevantEvents, taipeiToday, type Dividend, type Feed, type Holding, type Ledger } from '../domain/dividends';
 import { loadFeed, loadLedger, saveLedger } from '../services/dividends';
+import { eligibleShares, netDividend, resolvedShares, transactionStockCodes, type Transaction } from '../domain/entitlements';
 
 const feed = ref<Feed>({ version: 1, updatedAt: null, events: [], sources: [] });
 const ledger = ref<Ledger>({ version: 1, confirmations: {} });
 const holdings = ref<Holding[]>([]);
+const transactions = ref<Transaction[]>([]);
 const isDemo = ref(true);
 const portfolioReady = ref(false);
 const loading = ref(false);
@@ -17,33 +19,48 @@ const storageError = ref(false);
 const search = ref('');
 const year = ref(taipeiToday().slice(0, 4));
 const editing = ref<Dividend | null>(null);
-const sharesInput = ref<string | number>('');
+const feeInput = ref<string | number>('');
 const receivedInput = ref(false);
 const pendingImport = ref<Ledger | null>(null);
-const allEvents = computed(() => relevantEvents(feed.value, holdings.value, ledger.value));
+const allEvents = computed(() => relevantEvents(feed.value, holdings.value, ledger.value, transactionStockCodes(transactions.value)));
 const years = computed(() => [...new Set([taipeiToday().slice(0, 4), ...allEvents.value.map(e => (e.paymentDate || e.exDate).slice(0, 4))])].sort().reverse());
 const annual = computed(() => allEvents.value.filter(e => (e.paymentDate || e.exDate).startsWith(year.value)));
 const visible = computed(() => annual.value.filter(e => `${e.stockCode} ${e.stockName}`.toLowerCase().includes(search.value.trim().toLowerCase())));
 const missing = computed(() => holdings.value.filter(h => !annual.value.some(e => e.stockCode === String(h.stock_code))));
 const stale = computed(() => !feed.value.updatedAt || Date.now() - Date.parse(feed.value.updatedAt) > 3 * 86400000);
-const pendingCount = computed(() => annual.value.filter(e => !ledger.value.confirmations[e.id] || e.cashPerShare === null).length);
-const awaiting = computed(() => annual.value.reduce((sum, e) => sum + (ledger.value.confirmations[e.id]?.received ? 0 : amount(e) ?? 0), 0));
-const received = computed(() => annual.value.reduce((sum, e) => sum + (ledger.value.confirmations[e.id]?.received ? amount(e) ?? 0 : 0), 0));
+const pendingCount = computed(() => annual.value.filter(e => netAmount(e) === null).length);
+const awaiting = computed(() => annual.value.reduce((sum, e) => sum + (ledger.value.confirmations[e.id]?.received ? 0 : netAmount(e) ?? 0), 0));
+const received = computed(() => annual.value.reduce((sum, e) => sum + (ledger.value.confirmations[e.id]?.received ? netAmount(e) ?? 0 : 0), 0));
 const undated = computed(() => annual.value.filter(e => !e.paymentDate).length);
 const monthly = computed(() => Array.from({ length: 12 }, (_, i) => {
   const prefix = `${year.value}-${String(i + 1).padStart(2, '0')}`;
   const events = annual.value.filter(e => e.paymentDate?.startsWith(prefix));
-  return { month: i + 1, amount: events.reduce((total, e) => total + (amount(e) ?? 0), 0), pending: events.filter(e => amount(e) === null).length };
+  return { month: i + 1, amount: events.reduce((total, e) => total + (netAmount(e) ?? 0), 0), pending: events.filter(e => netAmount(e) === null).length };
 }));
 const maxMonthly = computed(() => Math.max(1, ...monthly.value.map(m => m.amount)));
 
-/** 預估以快照股數計算；已入帳紀錄保留確認當時的金額，避免公告修正改寫歷史。 */
-function amount(event: Dividend) {
+/** 依每日交易紀錄自動計算除息日前持股；已入帳後保留當時快照。 */
+function shareCount(event: Dividend) { return resolvedShares(event, transactions.value, ledger.value.confirmations[event.id]); }
+/** 稅前總額尚未扣匯費，供畫面核對。 */
+function grossAmount(event: Dividend) {
   const c = ledger.value.confirmations[event.id];
-  return estimateDividend(c?.shares ?? null, c?.received ? c.event.cashPerShare : event.cashPerShare);
+  return estimateDividend(shareCount(event), c?.received ? c.event.cashPerShare : event.cashPerShare);
 }
-/** 格式化台幣預估值；未知金額與零元分開顯示。 */
-function money(value: number | null) { return value === null ? '待確認' : `NT$ ${value.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}`; }
+/** 淨額必須有匯費才成立，避免把未知費用錯當成零。 */
+function netAmount(event: Dividend) { return netDividend(grossAmount(event), ledger.value.confirmations[event.id]?.remittanceFee); }
+/** 格式化台幣；未知值與零元分開顯示。 */
+function money(value: number | null) { return value === null ? '待確認' : `NT$ ${value.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
+/** 狀態同時反映交易資料、公告、匯費及入帳核對。 */
+function statusText(event: Dividend) {
+  const c = ledger.value.confirmations[event.id];
+  const entitlement = eligibleShares(transactions.value, event);
+  if (c?.received) return '已確認入帳';
+  if (entitlement.error) return '交易紀錄需修正';
+  if (event.cashPerShare === null) return '金額未公告';
+  if (!event.paymentDate) return '發放日未公告';
+  if (c?.remittanceFee === undefined) return '待設定匯費';
+  return event.paymentDate <= taipeiToday() ? '待核對入帳' : '待發放';
+}
 /** 檢查公告是否在使用者確認後修改，提示重新核對。 */
 function revised(event: Dividend) {
   const old = ledger.value.confirmations[event.id]?.event;
@@ -52,6 +69,7 @@ function revised(event: Dividend) {
 /** 接收舊帳務模組同步事件，不上傳持股至公開資料來源。 */
 function syncPortfolio() {
   holdings.value = state.inventory.map((h: Holding) => ({ stock_code: String(h.stock_code).trim(), stock_name: String(h.stock_name || ''), total_shares: Number(h.total_shares) }));
+  transactions.value = state.transactions.map((t: Transaction) => ({ ...t, stock_code: String(t.stock_code).trim() }));
   isDemo.value = state.isDemo;
   portfolioReady.value = true;
   storageError.value = false;
@@ -68,36 +86,36 @@ async function refresh() {
   catch (e) { warning.value = (e as Error).message; }
   finally { loading.value = false; }
 }
-/** 開啟某次配息編輯，不把目前股數自動認定為歷史領息資格。 */
+/** 開啟匯費／入帳設定；股數直接顯示交易紀錄推算結果。 */
 function edit(event: Dividend) {
   editing.value = event;
   const saved = ledger.value.confirmations[event.id];
-  sharesInput.value = saved ? String(saved.shares) : '';
+  feeInput.value = saved?.remittanceFee === undefined ? '' : saved.remittanceFee;
   receivedInput.value = saved?.received ?? false;
   error.value = '';
-}
-/** 使用者主動套用目前庫存；仍需按儲存確認該次資格。 */
-function useCurrentShares() {
-  sharesInput.value = String(holdings.value.find(h => h.stock_code === editing.value?.stockCode)?.total_shares ?? 0);
 }
 /** 寫入成功後才更新畫面，避免顯示實際未保存的股數。 */
 function persist(next: Ledger) {
   saveLedger(isDemo.value, next);
   ledger.value = next;
 }
-/** 儲存單次配息快照，零股數合法，負數、小數及空白禁止。 */
+/** 保存匯費與入帳快照；股數一律來自完整交易紀錄。 */
 function confirmShares() {
   if (!editing.value || storageError.value) return;
   try {
-    if (!/^\d+$/.test(String(sharesInput.value).trim())) throw new Error('請填入零或正整數股數。');
-    const shares = Number(sharesInput.value);
-    estimateDividend(shares, editing.value.cashPerShare ?? 0);
+    const entitlement = eligibleShares(transactions.value, editing.value);
+    if (entitlement.error || entitlement.shares === null) throw new Error(entitlement.error || '無法由交易紀錄推算股數。');
+    if (feeInput.value === '' || feeInput.value === null) throw new Error('請填入此次股息的匯費；沒有匯費請填 0。');
+    const fee = Number(feeInput.value);
+    const gross = estimateDividend(entitlement.shares, editing.value.cashPerShare);
+    netDividend(gross, fee);
     if (receivedInput.value && (editing.value.cashPerShare === null || !editing.value.paymentDate || editing.value.paymentDate > taipeiToday())) throw new Error('請在發放日到達且金額已公告後確認入帳。');
     const next = parseLedger(JSON.parse(JSON.stringify(ledger.value)));
-    next.confirmations[editing.value.id] = { event: { ...editing.value }, shares, confirmedAt: taipeiToday(), received: receivedInput.value };
+    next.confirmations[editing.value.id] = { event: { ...editing.value }, shares: entitlement.shares, confirmedAt: taipeiToday(), received: receivedInput.value, remittanceFee: fee };
     persist(next);
+    window.dispatchEvent(new Event('dividend-ledger-updated'));
     editing.value = null;
-    notice.value = '已儲存此次配息股數。入帳標記只用於股息追蹤，未新增現金流水。';
+    notice.value = receivedInput.value ? '已按扣除匯費後的淨額計入總覽「累計已落袋股息」。' : '已儲存匯費，股數將持續依每日交易紀錄自動更新。';
   } catch (e) { error.value = (e as Error).message; }
 }
 /** 下載僅含股息快照的本機備份，不包含試算表 URL 或 API 金鑰。 */
@@ -153,12 +171,12 @@ onUnmounted(() => window.removeEventListener('portfolio-updated', syncPortfolio)
       <span class="text-slate-400">按發放年度統計；發放日未公告時暫以除息年度歸類。</span>
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      <div class="panel"><p class="text-sm text-slate-400">已確認股數・尚未確認入帳</p><p class="text-2xl font-bold mt-3 text-indigo-300">{{ money(awaiting) }}</p><p class="hint">稅前預估，不含股數或金額待確認的紀錄</p></div>
-      <div class="panel"><p class="text-sm text-slate-400">已確認入帳・稅前參考</p><p class="text-2xl font-bold mt-3 text-emerald-300">{{ money(received) }}</p><p class="hint">保留確認時金額，實際入帳以券商明細為準</p></div>
-      <div class="panel"><p class="text-sm text-slate-400">尚待確認股數／金額</p><p class="text-2xl font-bold mt-3">{{ pendingCount }} <span class="text-sm font-normal text-slate-400">筆</span></p><p class="hint">尚有 {{ undated }} 筆發放日未公告</p></div>
+      <div class="panel"><p class="text-sm text-slate-400">預計入帳・已扣匯費</p><p class="text-2xl font-bold mt-3 text-indigo-300">{{ money(awaiting) }}</p><p class="hint">依交易紀錄自動推算；未填匯費的紀錄不列入</p></div>
+      <div class="panel"><p class="text-sm text-slate-400">已確認入帳・淨額</p><p class="text-2xl font-bold mt-3 text-emerald-300">{{ money(received) }}</p><p class="hint">已扣除匯費，並同步至總覽已落袋股息</p></div>
+      <div class="panel"><p class="text-sm text-slate-400">尚待補齊資料</p><p class="text-2xl font-bold mt-3">{{ pendingCount }} <span class="text-sm font-normal text-slate-400">筆</span></p><p class="hint">尚有 {{ undated }} 筆發放日未公告</p></div>
     </div>
     <div class="panel">
-      <h3 class="font-semibold">每月預估股息 <span class="text-xs text-slate-400 font-normal">依已確認股數，含已確認入帳</span></h3>
+      <h3 class="font-semibold">每月預估股息 <span class="text-xs text-slate-400 font-normal">依交易紀錄股數，金額皆扣除匯費</span></h3>
       <div class="grid grid-cols-3 sm:grid-cols-6 xl:grid-cols-12 gap-3 mt-5">
         <div v-for="m in monthly" :key="m.month" class="bg-slate-950/60 rounded-lg p-3 min-w-0">
           <p class="text-xs text-slate-400">{{ m.month }} 月</p><p class="text-sm font-semibold mt-2">{{ m.amount.toLocaleString('zh-TW', { maximumFractionDigits: 2 }) }}</p>
@@ -166,22 +184,22 @@ onUnmounted(() => window.removeEventListener('portfolio-updated', syncPortfolio)
           <p v-if="m.pending" class="text-xs text-amber-300 mt-2">{{ m.pending }} 筆待確認</p>
         </div>
       </div>
-      <p class="hint">發放日未公告的紀錄不分配至月份；此處不以去年股息推估未公告配息。</p>
+      <p class="hint">發放日未公告的紀錄不分配至月份；未填匯費不列入金額，沒有交易的日期視為沒有交易。</p>
     </div>
     <div class="panel !p-0 overflow-hidden">
       <div class="p-5 flex flex-wrap items-center justify-between gap-3"><h3 class="font-semibold">我的配息紀錄</h3><input v-model="search" class="field" type="search" aria-label="搜尋配息股票" placeholder="搜尋股票代號或名稱"></div>
       <div class="overflow-x-auto">
         <table class="w-full text-sm text-left whitespace-nowrap">
-          <thead class="bg-slate-950/50 text-slate-400"><tr><th>股票</th><th>除息日</th><th>發放日</th><th>每股／單位</th><th>參與股數</th><th>稅前預估</th><th>狀態</th><th>操作</th></tr></thead>
+          <thead class="bg-slate-950/50 text-slate-400"><tr><th>股票</th><th>除息日</th><th>發放日</th><th>每股／單位</th><th>自動股數</th><th>稅前總額</th><th>匯費</th><th>預估淨額</th><th>狀態</th><th>操作</th></tr></thead>
           <tbody class="divide-y divide-slate-800">
             <tr v-for="event in visible" :key="event.id">
               <td><strong>{{ event.stockCode }}</strong><p class="text-slate-400 text-xs mt-1">{{ event.stockName }}</p><a :href="event.sourceUrl" target="_blank" rel="noopener noreferrer" class="text-xs text-indigo-400">{{ event.source }}</a><p class="text-xs text-slate-500">資料 {{ event.updatedAt.slice(0, 10) }}</p></td>
               <td>{{ event.exDate }}</td><td>{{ event.paymentDate || '未公告' }}</td><td>{{ event.cashPerShare === null ? '未公告' : event.cashPerShare.toLocaleString('zh-TW', { maximumFractionDigits: 8 }) }}</td>
-              <td>{{ ledger.confirmations[event.id]?.shares?.toLocaleString('zh-TW') ?? '待確認' }}</td><td class="font-mono text-indigo-200">{{ money(amount(event)) }}</td>
-              <td><span class="text-xs rounded-full bg-slate-800 px-2 py-1">{{ dividendStatus(event, ledger.confirmations[event.id]) }}</span><p v-if="revised(event)" class="text-xs text-amber-300 mt-2">公告有修正，請重新核對</p></td>
-              <td><button class="secondary" :disabled="storageError" :aria-label="`確認 ${event.stockCode} ${event.exDate} 股數`" @click="edit(event)">{{ ledger.confirmations[event.id] ? '編輯確認' : '確認股數' }}</button></td>
+              <td><span v-if="shareCount(event) !== null">{{ shareCount(event)?.toLocaleString('zh-TW') }}</span><span v-else class="text-rose-300">無法計算</span></td><td>{{ money(grossAmount(event)) }}</td><td>{{ ledger.confirmations[event.id]?.remittanceFee === undefined ? '待輸入' : money(ledger.confirmations[event.id].remittanceFee ?? 0) }}</td><td class="font-mono text-indigo-200">{{ money(netAmount(event)) }}</td>
+              <td><span class="text-xs rounded-full bg-slate-800 px-2 py-1">{{ statusText(event) }}</span><p v-if="revised(event)" class="text-xs text-amber-300 mt-2">公告有修正，請重新核對</p></td>
+              <td><button class="secondary" :disabled="storageError" :aria-label="`設定 ${event.stockCode} ${event.exDate} 匯費與入帳`" @click="edit(event)">{{ ledger.confirmations[event.id] ? '編輯匯費／入帳' : '設定匯費／入帳' }}</button></td>
             </tr>
-            <tr v-if="!visible.length"><td colspan="8" class="!py-10 text-center text-slate-400">{{ loading ? '正在讀取公告…' : search ? '沒有符合搜尋條件的紀錄。' : '目前沒有此年度可顯示的配息公告。未查到資料不代表不配息。' }}</td></tr>
+            <tr v-if="!visible.length"><td colspan="10" class="!py-10 text-center text-slate-400">{{ loading ? '正在讀取公告…' : search ? '沒有符合搜尋條件的紀錄。' : '目前沒有此年度可顯示的配息公告。未查到資料不代表不配息。' }}</td></tr>
           </tbody>
         </table>
       </div>
@@ -190,17 +208,17 @@ onUnmounted(() => window.removeEventListener('portfolio-updated', syncPortfolio)
     <div class="text-xs text-slate-400 space-y-2">
       <p :class="stale ? 'text-amber-300' : ''">公告快照：{{ feed.updatedAt ? new Date(feed.updatedAt).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' }) : '尚未更新' }}（台北時間）{{ stale ? '・資料可能已過期' : '' }}</p>
       <p v-for="source in feed.sources" :key="source.name" :class="source.error ? 'text-amber-300' : ''">{{ source.name }}：{{ source.updatedAt ? new Date(source.updatedAt).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' }) : '尚未成功' }}{{ source.error ? `・${source.error}` : '' }}</p>
-      <p>此分頁的股數確認只保存在這個瀏覽器，不會同步 Google Sheets。可透過股息備份搬移至其他裝置；請自行保管備份。</p>
+      <p>股數直接依每日交易紀錄推算；匯費與入帳確認保存在這個瀏覽器，不會同步 Google Sheets。可透過股息備份搬移至其他裝置。</p>
     </div>
     <div v-if="editing" class="fixed inset-0 z-[60] bg-slate-950/90 flex items-center justify-center p-4" @keydown.esc="editing = null">
       <form class="panel w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="dividend-dialog-title" @submit.prevent="confirmShares">
         <h3 id="dividend-dialog-title" class="text-lg font-bold">{{ editing.stockCode }}・確認此次配息</h3>
         <p class="text-sm text-slate-400">除息 {{ editing.exDate }} ／ 發放 {{ editing.paymentDate || '未公告' }}</p>
-        <p class="banner">請填入有資格參與這次配息的股數。現在持股可能與除息時不同；未參與請填 0。</p>
-        <label class="block text-sm">參與配息股數<input v-model="sharesInput" class="field block w-full mt-2" inputmode="numeric" type="number" min="0" step="1" required autofocus></label>
-        <button type="button" class="text-sm text-indigo-300 underline" @click="useCurrentShares">帶入目前庫存（仍需自行核對）</button>
+        <p class="banner">參與股數由每日交易紀錄自動推算：累計除息日前的買入減賣出；除息日當天交易不影響此次資格。</p>
+        <div class="grid grid-cols-2 gap-3 text-sm"><div><p class="text-slate-400">自動股數</p><p class="font-bold mt-1">{{ shareCount(editing)?.toLocaleString('zh-TW') ?? '無法計算' }}</p></div><div><p class="text-slate-400">稅前總額</p><p class="font-bold mt-1">{{ money(grossAmount(editing)) }}</p></div></div>
+        <label class="block text-sm">匯費<input v-model="feeInput" class="field block w-full mt-2" inputmode="decimal" type="number" min="0" step="0.01" required autofocus><span class="hint block">沒有匯費請填 0；預估淨額＝稅前總額－匯費。</span></label>
         <label class="flex items-start gap-2 text-sm"><input v-model="receivedInput" type="checkbox" class="mt-1" :disabled="editing.cashPerShare === null || !editing.paymentDate || editing.paymentDate > taipeiToday()">我已核對券商紀錄，確認此筆已入帳</label>
-        <p class="hint">入帳標記不會自動新增現金流水，避免與原帳務重複計算。稅費、匯費與券商捨入差異未扣除。</p>
+        <p class="hint">確認入帳後，扣除匯費的淨額會計入總覽「累計已落袋股息」；若現金流水已有同股票同發放日的唯一股息紀錄，系統會自動去重。</p>
         <p v-if="error" role="alert" class="text-rose-300 text-sm">{{ error }}</p>
         <div class="flex justify-end gap-2"><button type="button" class="secondary" @click="editing = null">取消</button><button class="primary" type="submit">儲存確認</button></div>
       </form>

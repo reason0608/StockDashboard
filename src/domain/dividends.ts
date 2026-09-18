@@ -20,6 +20,8 @@ export interface Confirmation {
   shares: number;
   confirmedAt: string;
   received: boolean;
+  remittanceFee?: number;
+  cashFlowId?: string;
 }
 export interface Ledger { version: 1; confirmations: Record<string, Confirmation> }
 export interface Holding { stock_code: string; stock_name: string; total_shares: number }
@@ -80,15 +82,19 @@ export function parseLedger(value: unknown): Ledger {
   for (const [id, c] of Object.entries(l.confirmations)) {
     if (!c || !isDividend(c.event) || c.event.id !== id || !Number.isSafeInteger(c.shares) || c.shares < 0
       || typeof c.received !== 'boolean' || !isDate(c.confirmedAt)) throw new Error('備份含有無效的股息紀錄');
-    estimateDividend(c.shares, c.event.cashPerShare);
-    confirmations[id] = { event: { ...c.event }, shares: c.shares, received: c.received, confirmedAt: c.confirmedAt };
+    const gross = estimateDividend(c.shares, c.event.cashPerShare);
+    if (c.remittanceFee !== undefined && (typeof c.remittanceFee !== 'number' || !Number.isFinite(c.remittanceFee) || c.remittanceFee < 0 || Math.abs(c.remittanceFee * 100 - Math.round(c.remittanceFee * 100)) > 1e-7 || (gross !== null && c.remittanceFee > gross))) throw new Error('備份匯費不正確');
+    if (c.cashFlowId !== undefined && (typeof c.cashFlowId !== 'string' || !c.cashFlowId || c.cashFlowId.length > 200)) throw new Error('流水關聯不正確');
+    confirmations[id] = { event: { ...c.event }, shares: c.shares, received: c.received, confirmedAt: c.confirmedAt, ...(c.remittanceFee === undefined ? {} : { remittanceFee: c.remittanceFee }), ...(c.cashFlowId ? { cashFlowId: c.cashFlowId } : {}) };
   }
+  const links = Object.values(confirmations).filter(c => c.received && c.cashFlowId).map(c => c.cashFlowId);
+  if (new Set(links).size !== links.length) throw new Error('同一筆流水不能重複連結配息');
   return { version: 1, confirmations };
 }
 
 /** 保留賣出後的歷史確認紀錄；公告修正以新資料顯示，股數仍使用已確認快照。 */
-export function relevantEvents(feed: Feed, holdings: Holding[], ledger: Ledger) {
-  const codes = new Set(holdings.map(h => String(h.stock_code).trim()));
+export function relevantEvents(feed: Feed, holdings: Holding[], ledger: Ledger, transactionCodes: Set<string> = new Set()) {
+  const codes = new Set([...holdings.map(h => String(h.stock_code).trim()), ...transactionCodes]);
   const events = new Map(Object.values(ledger.confirmations).map(c => [c.event.id, c.event]));
   for (const event of feed.events) if (codes.has(event.stockCode) || events.has(event.id)) events.set(event.id, event);
   return [...events.values()].sort((a, b) => (a.paymentDate || a.exDate).localeCompare(b.paymentDate || b.exDate));

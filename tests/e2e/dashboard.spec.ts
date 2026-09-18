@@ -31,22 +31,26 @@ test('既有分頁與新增交易表單可操作，重新整理 hash 保留分�
 
 test('確認股數與入帳、重載仍保留，現在庫存不會改寫歷史', async ({ page }) => {
   await page.goto('./#/dividends');
-  await page.getByRole('button', { name: '確認 2330 2026-06-11 股數' }).click();
-  await page.getByLabel('參與配息股數').fill('2000');
+  await page.getByRole('button', { name: '設定 2330 2026-06-11 匯費與入帳' }).click();
+  await expect(page.getByRole('dialog').getByText('20', { exact: true })).toBeVisible();
+  await page.getByRole('dialog').getByRole('spinbutton').fill('10');
   await page.getByRole('button', { name: '儲存確認' }).click();
   await expect(page.getByRole('dialog')).not.toBeVisible();
-  await expect(page.locator('.dividends tbody')).toContainText('NT$ 12,000');
+  await expect(page.locator('.dividends tbody')).toContainText('NT$ 110.00');
   await page.reload();
-  await expect(page.locator('.dividends tbody')).toContainText('2,000');
-  await page.getByRole('button', { name: '確認 2330 2026-06-11 股數' }).click();
+  await expect(page.locator('.dividends tbody')).toContainText('20');
+  await page.getByRole('button', { name: '設定 2330 2026-06-11 匯費與入帳' }).click();
   await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: '儲存確認' }).click();
   await expect(page.locator('.dividends tbody')).toContainText('已確認入帳');
+  await page.locator('#tab-btn-dashboard').click();
+  await expect(page.locator('#card-total-dividends')).toHaveText('$1,610.00');
+  await page.locator('#tab-btn-dividends').click();
   // 賣光後仍保留已確認紀錄。
   await page.evaluate(() => localStorage.setItem('demo_transactions', '[]'));
   await page.reload();
-  await expect(page.locator('.dividends tbody')).toContainText('2,000');
-  await expect(page.locator('.dividends tbody')).toContainText('NT$ 12,000');
+  await expect(page.locator('.dividends tbody')).toContainText('20');
+  await expect(page.locator('.dividends tbody')).toContainText('NT$ 110.00');
 });
 
 test('非法備份不寫入，合法備份需確認且可匯出', async ({ page }) => {
@@ -58,7 +62,8 @@ test('非法備份不寫入，合法備份需確認且可匯出', async ({ page 
   await page.locator('input[type=file]').setInputFiles({ name: 'good.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
   await expect(page.getByRole('button', { name: '確認匯入' })).toBeVisible();
   await page.getByRole('button', { name: '確認匯入' }).click();
-  await expect(page.locator('.dividends tbody')).toContainText('NT$ 0');
+  await expect(page.locator('.dividends tbody')).toContainText('NT$ 120.00');
+  await expect(page.locator('.dividends tbody')).toContainText('待輸入');
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: '匯出股息備份' }).click();
   expect((await download).suggestedFilename()).toBe('dividends-demo-2026-09-18.json');
@@ -79,16 +84,16 @@ test('Sheets 持股與 Demo 快照分離，外部股票名稱不執行 HTML', as
   const gas = `https://script.google.com/macros/s/${'a'.repeat(60)}/exec`;
   await page.addInitScript(url => localStorage.setItem('sheet_api_url', url), gas);
   await page.route(gas, route => route.fulfill({ json: {
-    cashFlow: [], transactions: [], inventory: [{ stock_code: '2330', stock_name: '<img src=x onerror=alert(1)>', total_shares: 300, current_price: 100, market_value: 30000 }],
+    cashFlow: [], transactions: [{ id: 'T1', date: '2026-01-01', stock_code: '2330', stock_name: '台積電', action: '買入', shares: 300, price: 100, fee: 0, tax: 0, total_amount: 30000 }], inventory: [{ stock_code: '2330', stock_name: '<img src=x onerror=alert(1)>', total_shares: 300, current_price: 100, market_value: 30000 }],
   } }));
   await page.goto('./#/inventory');
   await expect(page.locator('#inventory-table-body')).toContainText('<img src=x onerror=alert(1)>');
   await expect(page.locator('#inventory-table-body img')).toHaveCount(0);
   await page.locator('#tab-btn-dividends').click();
   await expect(page.getByText('目前為 Demo 持股。', { exact: false })).not.toBeVisible();
-  await page.getByRole('button', { name: '確認 2330 2026-06-11 股數' }).click();
-  await page.getByRole('button', { name: '帶入目前庫存（仍需自行核對）' }).click();
-  await expect(page.getByLabel('參與配息股數')).toHaveValue('300');
+  await page.getByRole('button', { name: '設定 2330 2026-06-11 匯費與入帳' }).click();
+  await expect(page.getByRole('dialog').getByText('300', { exact: true })).toBeVisible();
+  await page.getByRole('dialog').getByRole('spinbutton').fill('0');
   await page.getByRole('button', { name: '儲存確認' }).click();
   expect(await page.evaluate(() => !!localStorage.getItem('stock_dashboard_dividends_v1_personal'))).toBe(true);
   expect(await page.evaluate(() => localStorage.getItem('stock_dashboard_dividends_v1_demo'))).toBeNull();

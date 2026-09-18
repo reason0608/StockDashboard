@@ -2,6 +2,8 @@ import * as lucide from '../shared/icons.js';
 import { renderContributionChart, renderAssetAllocationChart } from './charts.js';
 import { escapeHtml, formatNumber } from '../shared/format.js';
 import { toggleTab } from '../router';
+import { loadLedger } from '../services/dividends';
+import { realizedDividends } from '../domain/entitlements';
 
         // =========================================================================
         // ⚙️ 統一雲端連線設定：在此處貼上您的 Google Apps Script Web App URL。
@@ -132,6 +134,7 @@ import { toggleTab } from '../router';
         // --- 2. 系統啟動與數據整合載入 ---
         export async function initializeDashboard() {
             bindSettingsValidation();
+            window.addEventListener('dividend-ledger-updated', renderDashboard);
             // 優先讀取 LocalStorage 自訂覆蓋，若無則採用全域預設之 DEFAULT_API_URL
             state.apiUrl = localStorage.getItem("sheet_api_url") || DEFAULT_API_URL;
             
@@ -342,7 +345,6 @@ import { toggleTab } from '../router';
             let husbandContributed = 0;
             let wifeContributed = 0;
             let jointContributed = 0;
-            let totalDividends = 0;
 
             sortedFlows.forEach(flow => {
                 const amt = Number(flow.amount || 0);
@@ -360,7 +362,6 @@ import { toggleTab } from '../router';
                     }
                 } else if (typeStr === "股息流入" || typeStr.includes("股息") || typeStr.includes("配息")) {
                     calculatedCash += amt;
-                    totalDividends += amt;
                 } else if (typeStr === "證券交割支出" || typeStr.includes("支出") || typeStr.includes("交割")) {
                     calculatedCash -= Math.abs(amt);
                 } else if (typeStr === "活存利息" || typeStr.includes("利息")) {
@@ -400,7 +401,14 @@ import { toggleTab } from '../router';
             document.getElementById('card-stock-value').textContent = `$${formatNumber(totalStockValue)}`;
             document.getElementById('card-cash-balance').textContent = `$${formatNumber(cashBalance)}`;
             document.getElementById('card-total-contributed').textContent = `$${formatNumber(totalContributed)}`;
-            document.getElementById('card-total-dividends').textContent = `$${formatNumber(totalDividends)}`;
+            let totalDividends = 0;
+            try {
+                totalDividends = realizedDividends(state.cashFlow, loadLedger(state.isDemo));
+            } catch (error) {
+                console.warn('股息追蹤資料無法讀取，總覽暫時僅採用現金流水。', error);
+                totalDividends = state.cashFlow.filter(flow => /股息|配息/.test(String(flow.type || ''))).reduce((sum, flow) => sum + (Number(flow.amount) || 0), 0);
+            }
+            document.getElementById('card-total-dividends').textContent = `$${formatNumber(totalDividends, 2)}`;
 
             const pnlElement = document.getElementById('card-unrealized-pnl');
             const roiElement = document.getElementById('card-roi');
