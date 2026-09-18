@@ -29,23 +29,13 @@ test('既有分頁與新增交易表單可操作，重新整理 hash 保留分�
   expect(errors).toEqual([]);
 });
 
-test('確認股數與入帳、重載仍保留，現在庫存不會改寫歷史', async ({ page }) => {
+test('發放日到達即自動入帳，重載與賣出後仍保留快照', async ({ page }) => {
   await page.goto('./#/dividends');
-  await page.getByRole('button', { name: '設定 2330 2026-06-11 入帳狀態' }).click();
-  await expect(page.getByRole('dialog').getByText('20', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '儲存確認' }).click();
-  await expect(page.getByRole('dialog')).not.toBeVisible();
+  await expect(page.locator('.dividends tbody')).toContainText('已入帳');
   await expect(page.locator('.dividends tbody')).toContainText('NT$ 110.00');
-  await page.reload();
-  await expect(page.locator('.dividends tbody')).toContainText('20');
-  await page.getByRole('button', { name: '設定 2330 2026-06-11 入帳狀態' }).click();
-  await page.getByRole('checkbox').check();
-  await page.getByRole('button', { name: '儲存確認' }).click();
-  await expect(page.locator('.dividends tbody')).toContainText('已確認入帳');
   await page.locator('#tab-btn-dashboard').click();
   await expect(page.locator('#card-total-dividends')).toHaveText('$1,610.00');
   await page.locator('#tab-btn-dividends').click();
-  // 賣光後仍保留已確認紀錄。
   await page.evaluate(() => localStorage.setItem('demo_transactions', '[]'));
   await page.reload();
   await expect(page.locator('.dividends tbody')).toContainText('20');
@@ -57,7 +47,7 @@ test('非法備份不寫入，合法備份需確認且可匯出', async ({ page 
   await expect(page.getByRole('button', { name: '匯出股息備份' })).toBeEnabled();
   await page.locator('input[type=file]').setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('{"version":1,"confirmations":{"bad":{}}}') });
   await expect(page.getByRole('alert')).toContainText('無法匯入');
-  const backup = { version: 1, confirmations: { [fixtureEvent.id]: { event: fixtureEvent, shares: 0, confirmedAt: '2026-06-10', received: false } } };
+  const backup = { version: 1, confirmations: { [fixtureEvent.id]: { event: fixtureEvent, shares: 20, confirmedAt: '2026-07-09', received: true } } };
   await page.locator('input[type=file]').setInputFiles({ name: 'good.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
   await expect(page.getByRole('button', { name: '確認匯入' })).toBeVisible();
   await page.getByRole('button', { name: '確認匯入' }).click();
@@ -90,9 +80,8 @@ test('Sheets 持股與 Demo 快照分離，外部股票名稱不執行 HTML', as
   await expect(page.locator('#inventory-table-body img')).toHaveCount(0);
   await page.locator('#tab-btn-dividends').click();
   await expect(page.getByText('目前為 Demo 持股。', { exact: false })).not.toBeVisible();
-  await page.getByRole('button', { name: '設定 2330 2026-06-11 入帳狀態' }).click();
-  await expect(page.getByRole('dialog').getByText('300', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '儲存確認' }).click();
+  await expect(page.locator('.dividends tbody')).toContainText('300');
+  await expect(page.locator('.dividends tbody')).toContainText('已入帳');
   expect(await page.evaluate(() => !!localStorage.getItem('stock_dashboard_dividends_v1_personal'))).toBe(true);
   expect(await page.evaluate(() => localStorage.getItem('stock_dashboard_dividends_v1_demo'))).toBeNull();
 });

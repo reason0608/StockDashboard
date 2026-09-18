@@ -21,10 +21,10 @@ describe('股息計算與歷史快照', () => {
     expect(events).toHaveLength(1);
     expect(estimateDividend(ledger.confirmations[event.id].shares, events[0].cashPerShare)).toBe(1200);
   });
-  it('日期已過仍須手動核對入帳', () => {
-    expect(dividendStatus(event, undefined, '2026-09-18')).toBe('待確認股數');
+  it('依發放日自動判定入帳', () => {
+    expect(dividendStatus(event, undefined, '2026-09-18')).toBe('已入帳');
     expect(dividendStatus(event, ledger.confirmations[event.id], '2026-07-21')).toBe('待發放');
-    expect(dividendStatus(event, ledger.confirmations[event.id], '2026-09-18')).toBe('待核對入帳');
+    expect(dividendStatus(event, ledger.confirmations[event.id], '2026-09-18')).toBe('已入帳');
     expect(dividendStatus({ ...event, paymentDate: null }, ledger.confirmations[event.id])).toBe('發放日未公告');
   });
   it('公告更正更新金額、保持快照股數', () => {

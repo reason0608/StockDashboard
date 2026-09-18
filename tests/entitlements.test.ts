@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_REMITTANCE_FEE, eligibleShares, netDividend, realizedDividends, tradingDate } from '../src/domain/entitlements';
+import { DEFAULT_REMITTANCE_FEE, eligibleShares, isDividendReceived, netDividend, realizedDividends, tradingDate } from '../src/domain/entitlements';
 import type { Dividend, Ledger } from '../src/domain/dividends';
 
 const event: Dividend = { id: '2330:2026-06-11', stockCode: '2330', stockName: '台積電', exDate: '2026-06-11', paymentDate: '2026-07-09', cashPerShare: 6, source: 'test', sourceUrl: 'https://example.com/', updatedAt: '2026-09-18T00:00:00Z' };
@@ -36,13 +36,20 @@ describe('匯費與已落袋股息', () => {
     expect(netDividend(5)).toBe(0);
     expect(() => netDividend(100, 0.001)).toThrow();
   });
+  it('發放日到達即視為已入帳', () => {
+    expect(isDividendReceived(event, '2026-07-08')).toBe(false);
+    expect(isDividendReceived(event, '2026-07-09')).toBe(true);
+  });
   it('同股票同發放日唯一現金流水會去重', () => {
     const ledger: Ledger = { version: 1, confirmations: { [event.id]: { event, shares: 20, confirmedAt: '2026-07-09', received: true, remittanceFee: 10 } } };
     const flows = [{ id: 'FLOW_1', date: '2026-07-09', stock_code: '2330', type: '股息流入', amount: 110 }];
     expect(realizedDividends(flows, ledger)).toBe(110);
   });
-  it('沒有對應流水時仍把已確認淨額加入總覽', () => {
+  it('沒有對應流水時仍把已到發放日淨額加入總覽', () => {
     const ledger: Ledger = { version: 1, confirmations: { [event.id]: { event, shares: 20, confirmedAt: '2026-07-09', received: true, remittanceFee: 10 } } };
     expect(realizedDividends([], ledger)).toBe(110);
+    const future = { ...event, paymentDate: '2099-07-09' };
+    const futureLedger: Ledger = { version: 1, confirmations: { [future.id]: { event: future, shares: 20, confirmedAt: '2026-07-09', received: true, remittanceFee: 10 } } };
+    expect(realizedDividends([], futureLedger)).toBe(0);
   });
 });

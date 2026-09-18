@@ -105,11 +105,10 @@ export function taipeiToday() {
   return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Taipei' }).format(new Date());
 }
 
-/** 發放日已過仍需使用者確認入帳，不推定已收到款項。 */
-export function dividendStatus(event: Dividend, confirmation?: Confirmation, today = taipeiToday()) {
-  if (confirmation?.received) return '已確認入帳';
-  if (!confirmation) return '待確認股數';
-  if (event.cashPerShare === null) return '金額未公告';
+/** 依發放日自動判斷入帳狀態。 */
+export function dividendStatus(event: Dividend, _confirmation?: Confirmation, today = taipeiToday()) {
   if (!event.paymentDate) return '發放日未公告';
-  return event.paymentDate <= today ? '待核對入帳' : '待發放';
+  if (event.paymentDate <= today) return '已入帳';
+  if (event.cashPerShare === null) return '金額未公告';
+  return '待發放';
 }

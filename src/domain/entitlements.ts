@@ -47,11 +47,14 @@ export function netDividend(gross: number | null, fee: number = DEFAULT_REMITTAN
   return Math.max(0, Math.round((gross - fee) * 100) / 100);
 }
 
-/** 已入帳採當時快照；尚未入帳隨交易紀錄更新，舊手動股數不覆蓋交易推算。 */
+/** 發放日等於或早於台北今日即視為已入帳。 */
+export function isDividendReceived(event: Dividend, today = taipeiToday()) {
+  return event.paymentDate !== null && event.paymentDate <= today;
+}
 
-
+/** 已到發放日採當時快照；尚未發放隨交易紀錄更新。 */
 export function resolvedShares(event: Dividend, transactions: Transaction[], c?: Confirmation) {
-  return c?.received ? c.shares : eligibleShares(transactions, event).shares;
+  return c?.received && isDividendReceived(event) ? c.shares : eligibleShares(transactions, event).shares;
 }
 
 /** 顯示交易紀錄中曾持有的股票；沒有交易的日期自然不產生任何股數變動。 */
@@ -72,7 +75,7 @@ export function realizedDividends(flows: CashFlow[], ledger: Ledger): number {
   const excluded = new Set<string>();
   let total = 0;
   for (const c of Object.values(ledger.confirmations)) {
-    if (!c.received) continue;
+    if (!isDividendReceived(c.event)) continue;
     const net = netDividend(estimateDividend(c.shares, c.event.cashPerShare));
     if (net === null) continue;
     if (c.cashFlowId) excluded.add(c.cashFlowId);
