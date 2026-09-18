@@ -575,12 +575,40 @@ import { realizedDividends, realizedDividendsByStock } from '../domain/entitleme
             
             if (state.inventory.length === 0) {
                 body.innerHTML = `<tr><td colspan="10" class="px-6 py-10 text-center text-slate-500">目前庫存空空如也，快去買進第一檔股票吧！</td></tr>`;
+                document.getElementById('inventory-table-footer').innerHTML = '';
                 return;
             }
 
             let dividendsByStock = {};
             try { dividendsByStock = realizedDividendsByStock(state.cashFlow, loadLedger(state.isDemo)); }
             catch (error) { console.warn('無法讀取每檔已領股息，庫存表暫以現金流水計算。', error); }
+            const totals = state.inventory.reduce((sum, inv) => {
+                const cost = Number(inv.total_investment) || (Number(inv.avg_cost || 0) * Number(inv.total_shares || 0));
+                sum.cost += cost;
+                sum.marketValue += Number(inv.market_value || 0);
+                sum.dividends += Number(dividendsByStock[String(inv.stock_code).trim()] || 0);
+                sum.pnl += Number(inv.unrealized_pnl || 0);
+                return sum;
+            }, { cost: 0, marketValue: 0, dividends: 0, pnl: 0 });
+            const totalRoi = totals.cost > 0 ? totals.pnl / totals.cost * 100 : 0;
+            const totalRoiWithDividends = totals.cost > 0 ? (totals.pnl + totals.dividends) / totals.cost * 100 : 0;
+            const totalPnlClass = totals.pnl >= 0 ? 'text-red-500' : 'text-emerald-400';
+            const totalReturnClass = totalRoiWithDividends >= 0 ? 'text-red-500' : 'text-emerald-400';
+            document.getElementById('inventory-table-footer').innerHTML = `
+                <tr>
+                    <td class="px-6 py-4 text-slate-100">TOTAL</td>
+                    <td class="px-6 py-4">—</td>
+                    <td class="px-6 py-4">—</td>
+                    <td class="px-6 py-4 text-right">$${formatNumber(totals.cost)}</td>
+                    <td class="px-6 py-4">—</td>
+                    <td class="px-6 py-4 text-right">$${formatNumber(totals.marketValue)}</td>
+                    <td class="px-6 py-4 text-right text-amber-300">$${formatNumber(totals.dividends)}</td>
+                    <td class="px-6 py-4 text-right ${totalPnlClass}">${totals.pnl >= 0 ? '+' : ''}$${formatNumber(totals.pnl)}</td>
+                    <td class="px-6 py-4 text-right ${totalPnlClass}">${totalRoi >= 0 ? '+' : ''}${totalRoi.toFixed(2)}%</td>
+                    <td class="px-6 py-4 text-right ${totalReturnClass}">${totalRoiWithDividends >= 0 ? '+' : ''}${totalRoiWithDividends.toFixed(2)}%</td>
+                </tr>
+            `;
+
 
             body.innerHTML = state.inventory.map(inv => {
                 const pnl = Number(inv.unrealized_pnl || 0);
@@ -604,7 +632,7 @@ import { realizedDividends, realizedDividendsByStock } from '../domain/entitleme
                         <td class="px-6 py-4 text-right font-mono text-slate-300">$${formatNumber(calculatedCost)}</td>
                         <td class="px-6 py-4 text-right font-mono font-bold text-slate-100">$${formatNumber(inv.current_price, 2)}</td>
                         <td class="px-6 py-4 text-right font-mono font-bold text-slate-100">$${formatNumber(inv.market_value)}</td>
-                        <td class="px-6 py-4 text-right font-mono text-amber-300">$${formatNumber(receivedDividends, 2)}</td>
+                        <td class="px-6 py-4 text-right font-mono text-amber-300">$${formatNumber(receivedDividends)}</td>
                         <td class="px-6 py-4 text-right font-mono ${pnlClass}">${pnlPrefix}$${formatNumber(pnl)}</td>
                         <td class="px-6 py-4 text-right font-mono ${pnlClass}">${pnlPrefix}${roi.toFixed(2)}%</td>
                         <td class="px-6 py-4 text-right font-mono ${totalReturnClass}">${totalReturnPrefix}${totalReturnRate.toFixed(2)}%</td>
