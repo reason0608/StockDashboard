@@ -4,88 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>世界的至寶投資囉!</title>
-    <!-- Tailwind CSS (CDN) -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        border: "hsl(var(--border))",
-                        input: "hsl(var(--input))",
-                        ring: "hsl(var(--ring))",
-                        background: "hsl(var(--background))",
-                        foreground: "hsl(var(--foreground))",
-                        primary: {
-                            DEFAULT: "hsl(var(--primary))",
-                            foreground: "hsl(var(--primary-foreground))",
-                        },
-                        destructive: {
-                            DEFAULT: "hsl(var(--destructive))",
-                            foreground: "hsl(var(--destructive-foreground))",
-                        },
-                        muted: {
-                            DEFAULT: "hsl(var(--muted))",
-                            foreground: "hsl(var(--muted-foreground))",
-                        },
-                        accent: {
-                            DEFAULT: "hsl(var(--accent))",
-                            foreground: "hsl(var(--accent-foreground))",
-                        },
-                        popover: {
-                            DEFAULT: "hsl(var(--popover))",
-                            foreground: "hsl(var(--popover-foreground))",
-                        },
-                        card: {
-                            DEFAULT: "hsl(var(--card))",
-                            foreground: "hsl(var(--card-foreground))",
-                        },
-                    },
-                }
-            }
-        }
-    </script>
-    <style>
-        :root {
-            --background: 222.2 84% 4.9%;
-            --foreground: 210 40% 98%;
-            --card: 222.2 84% 4.9%;
-            --card-foreground: 210 40% 98%;
-            --popover: 222.2 84% 4.9%;
-            --popover-foreground: 210 40% 98%;
-            --primary: 217.2 91.2% 59.8%;
-            --primary-foreground: 222.2 47.4% 11.2%;
-            --muted: 217.2 32.6% 17.5%;
-            --muted-foreground: 215 20.2% 65.1%;
-            --accent: 217.2 32.6% 17.5%;
-            --accent-foreground: 210 40% 98%;
-            --destructive: 0 62.8% 30.6%;
-            --destructive-foreground: 210 40% 98%;
-            --border: 217.2 32.6% 17.5%;
-            --input: 217.2 32.6% 17.5%;
-            --ring: 224.3 76.3% 48%;
-        }
-        /* 美化滾動條 */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #0f172a;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #334155;
-            border-radius: 3px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #475569;
-        }
-    </style>
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="bg-slate-950 text-slate-50 font-sans min-h-screen flex flex-col pb-12">
 
@@ -105,16 +23,16 @@
             <!-- 連線狀態指示燈與同步按鈕 (手機端優化) -->
             <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
                 <!-- 手機版只顯示狀態圓點，點擊觸發 Tooltip Toast -->
-                <button id="connection-badge" onclick="showConnectionStatusToast()" class="cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-2.5 sm:py-0.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 transition-all duration-200 active:scale-95" title="點擊查看連線狀態">
+                <button id="connection-badge" data-event="click" data-action="showConnectionStatusToast" class="cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-2.5 sm:py-0.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 transition-all duration-200 active:scale-95" title="點擊查看連線狀態">
                     <span class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse shrink-0"></span>
                     <span class="hidden sm:inline" id="connection-text">DEMO 測試模式</span>
                 </button>
                 
-                <button onclick="reloadData()" title="立即手動同步雲端數據" class="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition shrink-0">
+                <button data-event="click" data-action="reloadData" title="立即手動同步雲端數據" class="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition shrink-0">
                     <i data-lucide="rotate-cw" class="w-5 h-5" id="sync-icon"></i>
                 </button>
 
-                <button onclick="toggleTab('settings')" title="連線設定" class="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition shrink-0">
+                <button data-event="click" data-action="toggleTab" data-arg="settings" title="連線設定" class="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition shrink-0">
                     <i data-lucide="settings" class="w-5 h-5"></i>
                 </button>
             </div>
@@ -135,7 +53,7 @@
                     <p class="text-xs text-slate-400 mt-1">系統已自動啟用「安全降級機制」顯示 Demo 測試數據。錯誤原因：<span id="diagnostic-error-summary" class="text-amber-400 font-semibold font-mono">連線超時或網路錯誤</span></p>
                 </div>
             </div>
-            <button onclick="openDiagnosticModal()" class="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shrink-0">
+            <button data-event="click" data-action="openDiagnosticModal" class="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shrink-0">
                 <i data-lucide="heart-pulse" class="w-3.5 h-3.5"></i>
                 開啟連線診斷排除步驟
             </button>
@@ -143,19 +61,22 @@
         
         <!-- Tab 切換按鈕 -->
         <div class="flex border-b border-slate-800 mb-6 overflow-x-auto gap-2">
-            <button onclick="toggleTab('dashboard')" id="tab-btn-dashboard" class="px-4 py-2.5 border-b-2 border-indigo-500 font-medium text-sm text-indigo-400 flex items-center gap-2 whitespace-nowrap transition-all">
+            <button data-event="click" data-action="toggleTab" data-arg="dashboard" id="tab-btn-dashboard" class="px-4 py-2.5 border-b-2 border-indigo-500 font-medium text-sm text-indigo-400 flex items-center gap-2 whitespace-nowrap transition-all">
                 <i data-lucide="layout-dashboard" class="w-4 h-4"></i> 總覽看板
             </button>
-            <button onclick="toggleTab('cash-flow')" id="tab-btn-cash-flow" class="px-4 py-2.5 border-b-2 border-transparent font-medium text-sm text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap transition-all">
+            <button data-event="click" data-action="toggleTab" data-arg="cash-flow" id="tab-btn-cash-flow" class="px-4 py-2.5 border-b-2 border-transparent font-medium text-sm text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap transition-all">
                 <i data-lucide="wallet" class="w-4 h-4"></i> 現金流水帳
             </button>
-            <button onclick="toggleTab('inventory')" id="tab-btn-inventory" class="px-4 py-2.5 border-b-2 border-transparent font-medium text-sm text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap transition-all">
+            <button data-event="click" data-action="toggleTab" data-arg="inventory" id="tab-btn-inventory" class="px-4 py-2.5 border-b-2 border-transparent font-medium text-sm text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap transition-all">
                 <i data-lucide="briefcase" class="w-4 h-4"></i> 現有持股庫存
             </button>
-            <button onclick="toggleTab('transactions')" id="tab-btn-transactions" class="px-4 py-2.5 border-b-2 border-transparent font-medium text-sm text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap transition-all">
+            <button data-event="click" data-action="toggleTab" data-arg="dividends" id="tab-btn-dividends" class="px-4 py-2.5 border-b-2 border-transparent font-medium text-sm text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap"><i data-lucide="calendar-days" class="w-4 h-4"></i> 股息追蹤</button>
+            <button data-event="click" data-action="toggleTab" data-arg="transactions" id="tab-btn-transactions" class="px-4 py-2.5 border-b-2 border-transparent font-medium text-sm text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap transition-all">
                 <i data-lucide="history" class="w-4 h-4"></i> 每日交易紀錄
             </button>
         </div>
+
+        <section id="tab-content-dividends" class="hidden"><div id="dividends-app"></div></section>
 
         <!-- ==================== 1. 總覽看板 ==================== -->
         <section id="tab-content-dashboard" class="space-y-6">
@@ -291,7 +212,7 @@
                     <h2 class="text-xl font-bold">現金流水帳</h2>
                     <p class="text-xs text-slate-400 font-mono">對應試算表中的 「users_cash_flow」 工作表</p>
                 </div>
-                <button onclick="openModal('cashflow-modal')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-1.5 shadow transition">
+                <button data-event="click" data-action="openModal" data-arg="cashflow-modal" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-1.5 shadow transition">
                     <i data-lucide="plus" class="w-4 h-4"></i> 新增流水帳
                 </button>
             </div>
@@ -356,7 +277,7 @@
                     <h2 class="text-xl font-bold">每日交易歷史紀錄</h2>
                     <p class="text-xs text-slate-400 font-mono">對應試算表中的 「daily_transactions」 工作表</p>
                 </div>
-                <button onclick="openModal('transaction-modal')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-1.5 shadow transition">
+                <button data-event="click" data-action="openModal" data-arg="transaction-modal" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-1.5 shadow transition">
                     <i data-lucide="plus" class="w-4 h-4"></i> 新增交易紀錄
                 </button>
             </div>
@@ -427,11 +348,11 @@
                     </div>
 
                     <div class="flex gap-3 pt-2">
-                        <button onclick="saveApiSettings()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition flex items-center gap-2">
+                        <button data-event="click" data-action="saveApiSettings" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition flex items-center gap-2">
                             <i data-lucide="save" class="w-4 h-4"></i>
                             儲存連線與設定並重整
                         </button>
-                        <button onclick="resetToDemo()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-5 py-2.5 rounded-lg text-sm font-semibold transition">
+                        <button data-event="click" data-action="resetToDemo" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-5 py-2.5 rounded-lg text-sm font-semibold transition">
                             切換回 DEMO 測試模式
                         </button>
                     </div>
@@ -444,7 +365,7 @@
                 <ol class="space-y-3 text-sm text-slate-400 list-decimal list-inside">
                     <li>開啟你的 <span class="text-white font-medium">Google 試算表</span>。</li>
                     <li>點選上方選單的 <span class="text-white font-medium">「擴充功能」 $\rightarrow$ 「Apps Script」</span>。</li>
-                    <li>刪除裡面所有預設程式碼，將下方 <span class="text-indigo-400 font-semibold cursor-pointer underline" onclick="copyAppsScriptCode()">這個腳本 (點此複製)</span> 貼進去：</li>
+                    <li>刪除裡面所有預設程式碼，將下方 <span class="text-indigo-400 font-semibold cursor-pointer underline" data-event="click" data-action="copyAppsScriptCode">這個腳本 (點此複製)</span> 貼進去：</li>
                     <pre class="bg-slate-950 text-slate-300 p-3 rounded-lg overflow-x-auto text-xs border border-slate-800 font-mono select-all" id="apps-script-code-block">
 /* 請將此段代碼貼到 Google Apps Script 編輯器中 */
 function doGet() {
@@ -488,9 +409,9 @@ function getSheetData(sheet) {
   var data = sheet.getDataRange().getValues();
   var keys = data[0];
   var list = [];
-  for (var i = 1; i < data.length; i++) {
+  for (var i = 1; i &lt; data.length; i++) {
     var obj = {};
-    for (var j = 0; j < keys.length; j++) {
+    for (var j = 0; j &lt; keys.length; j++) {
       var val = data[i][j];
       // 處理日期格式
       if (val instanceof Date) {
@@ -523,11 +444,11 @@ function getSheetData(sheet) {
                     <i data-lucide="wallet" class="text-indigo-500 w-5 h-5"></i>
                     新增現金收支紀錄
                 </h3>
-                <button onclick="closeModal('cashflow-modal')" class="text-slate-400 hover:text-white">
+                <button data-event="click" data-action="closeModal" data-arg="cashflow-modal" class="text-slate-400 hover:text-white">
                     <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
-            <form id="cashflow-form" onsubmit="submitCashFlow(event)" class="p-6 space-y-4">
+            <form id="cashflow-form" data-event="submit" data-action="submitCashFlow" class="p-6 space-y-4">
                 <div>
                     <label class="block text-xs font-semibold text-slate-400 mb-1">交易日期</label>
                     <input type="date" id="cf-date" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500">
@@ -540,7 +461,7 @@ function getSheetData(sheet) {
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-slate-400 mb-1">收支類別</label>
-                    <select id="cf-type" onchange="toggleStockCodeInput()" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500">
+                    <select id="cf-type" data-event="change" data-action="toggleStockCodeInput" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500">
                         <option value="存入">存入本金</option>
                         <option value="證券交割支出">證券交割支出</option>
                         <option value="股息流入">股息流入</option>
@@ -559,7 +480,7 @@ function getSheetData(sheet) {
                     <input type="text" id="cf-note" placeholder="例如：6月份存入、台積電除息" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500">
                 </div>
                 <div class="pt-4 flex gap-3">
-                    <button type="button" onclick="closeModal('cashflow-modal')" class="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-200 py-2.5 rounded-lg text-sm font-semibold transition">取消</button>
+                    <button type="button" data-event="click" data-action="closeModal" data-arg="cashflow-modal" class="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-200 py-2.5 rounded-lg text-sm font-semibold transition">取消</button>
                     <button type="submit" class="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg text-sm font-semibold transition">送出並儲存</button>
                 </div>
             </form>
@@ -574,11 +495,11 @@ function getSheetData(sheet) {
                     <i data-lucide="history" class="text-indigo-500 w-5 h-5"></i>
                     新增交易紀錄
                 </h3>
-                <button onclick="closeModal('transaction-modal')" class="text-slate-400 hover:text-white">
+                <button data-event="click" data-action="closeModal" data-arg="transaction-modal" class="text-slate-400 hover:text-white">
                     <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
-            <form id="transaction-form" onsubmit="submitTransaction(event)" class="p-6 space-y-4">
+            <form id="transaction-form" data-event="submit" data-action="submitTransaction" class="p-6 space-y-4">
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="block text-xs font-semibold text-slate-400 mb-1">交易日期</label>
@@ -623,7 +544,7 @@ function getSheetData(sheet) {
                     </div>
                 </div>
                 <div class="pt-4 flex gap-3">
-                    <button type="button" onclick="closeModal('transaction-modal')" class="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-200 py-2.5 rounded-lg text-sm font-semibold transition">取消</button>
+                    <button type="button" data-event="click" data-action="closeModal" data-arg="transaction-modal" class="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-200 py-2.5 rounded-lg text-sm font-semibold transition">取消</button>
                     <button type="submit" class="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg text-sm font-semibold transition">送出並儲存</button>
                 </div>
             </form>
@@ -638,7 +559,7 @@ function getSheetData(sheet) {
                     <i data-lucide="heart-pulse"></i>
                     Google 試算表連線診斷
                 </h3>
-                <button onclick="closeModal('diagnostic-modal')" class="text-slate-400 hover:text-white">
+                <button data-event="click" data-action="closeModal" data-arg="diagnostic-modal" class="text-slate-400 hover:text-white">
                     <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
@@ -684,7 +605,7 @@ function getSheetData(sheet) {
                 </div>
 
                 <div class="pt-4 flex gap-3">
-                    <button onclick="closeModal('diagnostic-modal')" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 py-2.5 rounded-lg text-sm font-semibold transition">我知道了</button>
+                    <button data-event="click" data-action="closeModal" data-arg="diagnostic-modal" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 py-2.5 rounded-lg text-sm font-semibold transition">我知道了</button>
                 </div>
             </div>
         </div>
@@ -697,977 +618,6 @@ function getSheetData(sheet) {
     </div>
 
     <!-- ==================== 核心 JavaScript ==================== -->
-    <script>
-        // =========================================================================
-        // ⚙️ 統一雲端連線設定：在此處貼上您的 Google Apps Script Web App URL。
-        // 當您將 index.html 分發給老婆或其他設備時，所有人打開皆能直接使用，完全不需再次設定！
-        // =========================================================================
-        const DEFAULT_API_URL = ""; // 👈 填入您的 Web App 完整網址 (包含完整的 56 字元部署 ID)
-
-        // --- 1. 初始化 Mock / 預設數據 (DEMO 模式使用) ---
-        const DEFAULT_CASH_FLOW = [
-            { id: "FLOW_001", date: "2026-06-01", contributor: "老公", type: "存入", stock_code: "", amount: 100000, note: "6月份固定投資入金" },
-            { id: "FLOW_002", date: "2026-06-01", contributor: "老婆", type: "存入", stock_code: "", amount: 100000, note: "6月份固定投資入金" },
-            { id: "FLOW_003", date: "2026-06-05", contributor: "共同", type: "證券交割支出", stock_code: "2330", amount: 20540, note: "買入台積電零股交割" },
-            { id: "FLOW_004", date: "2026-06-08", contributor: "共同", type: "證券交割支出", stock_code: "0050", amount: 15150, note: "今日買入0050零股交割" },
-            { id: "FLOW_005", date: "2026-06-08", contributor: "共同", type: "股息流入", stock_code: "2330", amount: 1500, note: "台積電季配息自動入帳" },
-        ];
-
-        const DEFAULT_TRANSACTIONS = [
-            { id: "TX_001", date: "2026-06-05", stock_code: "2330", stock_name: "台積電", action: "買入", price: 1025.00, shares: 20, fee: 20, tax: 0, total_amount: 20520 },
-            { id: "TX_002", date: "2026-06-08", stock_code: "0050", stock_name: "元大台灣50", action: "買入", price: 151.30, shares: 100, fee: 20, tax: 0, total_amount: 15150 },
-        ];
-
-        const DEMO_PRICES = {
-            "2330": { name: "台積電", price: 1045.00 },
-            "0050": { name: "元大台灣50", price: 153.20 }
-        };
-
-        // 系統狀態
-        let state = {
-            cashFlow: [],
-            transactions: [],
-            inventory: [],
-            apiUrl: "",
-            isDemo: true,
-            lastError: ""
-        };
-
-        let contributionChartInstance = null;
-        let assetAllocationChartInstance = null;
-
-        // 智慧型網址規格驗證器 (Tech Lead 專防複製錯誤)
-        function validateGasUrl(url) {
-            if (!url) return { valid: false, reason: "尚未輸入網址" };
-            const cleanUrl = url.trim();
-            if (!cleanUrl.startsWith("https://script.google.com/macros/s/")) {
-                return { valid: false, reason: "網址開頭不正確！必須是 https://script.google.com/macros/s/ 開頭。" };
-            }
-            const parts = cleanUrl.split("/macros/s/");
-            if (parts.length < 2) return { valid: false, reason: "無法解析網址中的部署 ID 區段。" };
-            
-            const idPart = parts[1].split("/")[0];
-            if (idPart.length < 56) {
-                return { 
-                    valid: false, 
-                    reason: `偵測到部署 ID 只有 ${idPart.length} 個字元（一般標準應為 56 個字元）！這 99% 是複製貼上時最後幾個字漏掉了。請重新開啟 Apps Script 部署視窗，完整複製完整的 Web App 網址。` 
-                };
-            }
-            if (!cleanUrl.endsWith("/exec")) {
-                return { valid: false, reason: "網頁應用程式網址必須以 /exec 結尾！" };
-            }
-            return { valid: true };
-        }
-
-        // 監聽網址欄位輸入，進行智慧防呆提示
-        document.addEventListener("DOMContentLoaded", () => {
-            const apiInput = document.getElementById("settings-api-url");
-            if (apiInput) {
-                apiInput.addEventListener("input", (e) => {
-                    const url = e.target.value.trim();
-                    const warning = document.getElementById("url-warning");
-                    const validation = validateGasUrl(url);
-                    
-                    if (url && !validation.valid) {
-                        warning.classList.remove("hidden");
-                        warning.innerHTML = `<i data-lucide="alert-circle" class="w-4 h-4 shrink-0"></i><span>${validation.reason}</span>`;
-                        lucide.createIcons();
-                    } else {
-                        warning.classList.add("hidden");
-                    }
-                });
-            }
-        });
-
-        // 台北時區精準格式化器 (僅顯示 YYYY-MM-DD，絕不漏日跳日)
-        function formatDateTaipei(dateInput) {
-            if (!dateInput) return "-";
-            if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput.trim())) {
-                return dateInput.trim();
-            }
-            try {
-                const date = new Date(dateInput);
-                if (isNaN(date.getTime())) {
-                    const match = String(dateInput).match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-                    if (match) {
-                        return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
-                    }
-                    return String(dateInput);
-                }
-                const formatter = new Intl.DateTimeFormat('zh-TW', {
-                    timeZone: 'Asia/Taipei',
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit'
-                });
-                return formatter.format(date).replace(/\//g, '-');
-            } catch (e) {
-                return String(dateInput);
-            }
-        }
-
-        // 手機端點擊狀態燈觸發連線狀態 Tooltip
-        function showConnectionStatusToast() {
-            let statusMessage = "連線狀態：";
-            let iconName = "alert-circle";
-            let iconColor = "text-amber-400";
-
-            if (state.isDemo) {
-                statusMessage += "DEMO 測試預覽模式 (無雲端連線)";
-            } else if (state.lastError) {
-                statusMessage += "雲端連線失敗，已自動降級回離線模式";
-                iconColor = "text-red-400";
-            } else {
-                statusMessage += "Google 試算表同步連線成功！";
-                iconColor = "text-emerald-400";
-                iconName = "check-circle";
-            }
-            showToast(statusMessage, iconName, iconColor);
-        }
-
-        // --- 2. 系統啟動與數據整合載入 ---
-        window.onload = async function() {
-            // 優先讀取 LocalStorage 自訂覆蓋，若無則採用全域預設之 DEFAULT_API_URL
-            state.apiUrl = localStorage.getItem("sheet_api_url") || DEFAULT_API_URL;
-            
-            // 如果成功讀取到了程式碼中宣告的預設 API 網址，顯示提示綠條
-            if (DEFAULT_API_URL && !localStorage.getItem("sheet_api_url")) {
-                const indicator = document.getElementById('central-config-indicator');
-                if (indicator) indicator.classList.remove('hidden');
-            }
-
-            // 讀取出資人姓名設定
-            document.getElementById('settings-husband-name').value = localStorage.getItem("husband_name") || "";
-            document.getElementById('settings-wife-name').value = localStorage.getItem("wife_name") || "";
-
-            // 設定今日日期預設值 (台北時區)
-            const todayStr = formatDateTaipei(new Date());
-            document.getElementById('cf-date').value = todayStr;
-            document.getElementById('tx-date').value = todayStr;
-            document.getElementById('current-date-badge').innerHTML = `<i data-lucide="calendar" class="w-3.5 h-3.5"></i> ${todayStr} (今日)`;
-
-            if (state.apiUrl) {
-                state.isDemo = false;
-                const badge = document.getElementById('connection-badge');
-                badge.className = "cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-2.5 sm:py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 transition-all duration-200 active:scale-95";
-                badge.innerHTML = `
-                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
-                    <span class="hidden sm:inline" id="connection-text">Google 試算表連線中</span>
-                `;
-                document.getElementById('settings-api-url').value = state.apiUrl;
-            } else {
-                state.isDemo = true;
-                if (!localStorage.getItem('demo_cash_flow')) {
-                    localStorage.setItem('demo_cash_flow', JSON.stringify(DEFAULT_CASH_FLOW));
-                    localStorage.setItem('demo_transactions', JSON.stringify(DEFAULT_TRANSACTIONS));
-                }
-            }
-
-            await reloadData();
-            lucide.createIcons();
-        };
-
-        // --- 3. 數據同步核心 ---
-        async function reloadData() {
-            const syncIcon = document.getElementById('sync-icon');
-            if (syncIcon) syncIcon.classList.add('animate-spin');
-            showLoadingToast("正在同步資產數據...");
-
-            try {
-                if (state.isDemo || !state.apiUrl) {
-                    state.cashFlow = JSON.parse(localStorage.getItem('demo_cash_flow')) || DEFAULT_CASH_FLOW;
-                    state.transactions = JSON.parse(localStorage.getItem('demo_transactions')) || DEFAULT_TRANSACTIONS;
-                    calculateInventoryFromTransactions();
-                    document.getElementById('connection-error-banner').classList.add('hidden');
-                } else {
-                    // 先行驗證網址結構，防禦並在前端攔截無效的請求
-                    const validation = validateGasUrl(state.apiUrl);
-                    if (!validation.valid) {
-                        throw new Error(`網址格式錯誤：${validation.reason}`);
-                    }
-
-                    const response = await fetch(state.apiUrl, { redirect: "follow" });
-                    if (!response.ok) throw new Error(`HTTP 錯誤! 狀態碼: ${response.status}`);
-                    
-                    const data = await response.json();
-                    
-                    if (!data || (!data.cashFlow && !data.transactions && !data.inventory)) {
-                        throw new Error("API 回傳結構不正確。請確認 Google 試算表工作表分頁命名為 users_cash_flow, daily_transactions, stock_inventory 且腳本複製完全。");
-                    }
-
-                    state.cashFlow = (data.cashFlow || []).filter(item => item.id);
-                    state.transactions = (data.transactions || []).filter(item => item.id);
-                    state.inventory = (data.inventory || []).filter(item => item.stock_code);
-                    state.lastError = "";
-
-                    const badge = document.getElementById('connection-badge');
-                    badge.className = "cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-2.5 sm:py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 transition-all duration-200 active:scale-95";
-                    badge.innerHTML = `
-                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
-                        <span class="hidden sm:inline" id="connection-text">雲端連線成功</span>
-                    `;
-                    document.getElementById('connection-error-banner').classList.add('hidden');
-                }
-
-                renderDashboard();
-                renderCashFlowTable();
-                renderTransactionsTable();
-                renderInventoryTable();
-                
-                showToast(state.isDemo ? "已載入 Demo 數據！" : "雲端數據同步成功！", "check-circle", "text-emerald-400");
-            } catch (error) {
-                console.error("同步報錯:", error);
-                state.lastError = error.toString();
-                
-                state.isDemo = true;
-                state.cashFlow = JSON.parse(localStorage.getItem('demo_cash_flow')) || DEFAULT_CASH_FLOW;
-                state.transactions = JSON.parse(localStorage.getItem('demo_transactions')) || DEFAULT_TRANSACTIONS;
-                calculateInventoryFromTransactions();
-                
-                renderDashboard();
-                renderCashFlowTable();
-                renderTransactionsTable();
-                renderInventoryTable();
-
-                document.getElementById('connection-error-banner').classList.remove('hidden');
-                document.getElementById('diagnostic-error-summary').textContent = "連線失敗 (CORS或網址部署錯誤)";
-                document.getElementById('diagnostic-raw-error').textContent = `${error.toString()}\n\n時間: 2026-06-08\n連線網址: ${state.apiUrl}\n\n【排錯關鍵提示】:\n如果此處拋出 Failed to fetch 且您的網址長度非標準56字元ID，請回 Cloud 控制台確認是否完整複製了 /exec 結尾的 Web App URL。`;
-                
-                const badge = document.getElementById('connection-badge');
-                badge.className = "cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-2.5 sm:py-0.5 rounded-full text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20 transition-all duration-200 active:scale-95";
-                badge.innerHTML = `
-                    <span class="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0"></span>
-                    <span class="hidden sm:inline" id="connection-text">連線失敗 (Demo 預覽)</span>
-                `;
-                
-                showToast("雲端同步失敗，已開啟防禦 Demo 預覽！", "alert-circle", "text-amber-400");
-            } finally {
-                if (syncIcon) syncIcon.classList.remove('animate-spin');
-            }
-        }
-
-        function openDiagnosticModal() {
-            openModal('diagnostic-modal');
-        }
-
-        function calculateInventoryFromTransactions() {
-            const invMap = {};
-            state.transactions.forEach(t => {
-                if (!invMap[t.stock_code]) {
-                    invMap[t.stock_code] = {
-                        stock_code: t.stock_code,
-                        stock_name: t.stock_name,
-                        total_shares: 0,
-                        total_cost_spent: 0,
-                    };
-                }
-                const item = invMap[t.stock_code];
-                const sharesNum = Number(t.shares || 0);
-                const totalAmtNum = Number(t.total_amount || 0);
-
-                if (t.action === "買入") {
-                    item.total_shares += sharesNum;
-                    item.total_cost_spent += totalAmtNum;
-                } else if (t.action === "賣出") {
-                    item.total_shares -= sharesNum;
-                    item.total_cost_spent -= totalAmtNum;
-                }
-            });
-
-            state.inventory = Object.values(invMap).filter(item => item.total_shares > 0).map(item => {
-                const demoPriceInfo = DEMO_PRICES[item.stock_code] || { price: 100 };
-                const current_price = demoPriceInfo.price;
-                const market_value = item.total_shares * current_price;
-                const avg_cost = item.total_shares > 0 ? (item.total_cost_spent / item.total_shares) : 0;
-                const unrealized_pnl = market_value - item.total_cost_spent;
-                const roi = item.total_cost_spent > 0 ? (unrealized_pnl / item.total_cost_spent) : 0;
-
-                return {
-                    stock_code: item.stock_code,
-                    stock_name: item.stock_name,
-                    total_shares: item.total_shares,
-                    avg_cost: Math.round(avg_cost * 100) / 100,
-                    total_investment: item.total_cost_spent,
-                    current_price: current_price,
-                    market_value: market_value,
-                    unrealized_pnl: unrealized_pnl,
-                    roi: roi
-                };
-            });
-        }
-
-        // --- 4. 畫面渲染函式群 ---
-        function renderDashboard() {
-            // 智慧姓名動態偵測核心
-            const contributorsSet = new Set();
-            state.cashFlow.forEach(flow => {
-                if (flow.type === "存入" && flow.contributor !== "共同" && flow.contributor) {
-                    contributorsSet.add(flow.contributor);
-                }
-            });
-            const contributorsList = Array.from(contributorsSet);
-
-            const configHusband = localStorage.getItem("husband_name") || "";
-            const configWife = localStorage.getItem("wife_name") || "";
-
-            const husbandName = configHusband || contributorsList[0] || "老公";
-            const wifeName = configWife || contributorsList[1] || "老婆";
-
-            const cfSelect = document.getElementById('cf-contributor');
-            if (cfSelect) {
-                cfSelect.innerHTML = `
-                    <option value="${husbandName}">${husbandName}</option>
-                    <option value="${wifeName}">${wifeName}</option>
-                    <option value="共同">共同</option>
-                `;
-            }
-
-            // 依日期與 ID 排序流水帳，確保能夠準確鎖定最後一筆
-            const sortedFlows = [...state.cashFlow].sort((a, b) => {
-                const dateDiff = new Date(a.date) - new Date(b.date);
-                if (dateDiff !== 0) return dateDiff;
-                const idA = Number(String(a.id).replace(/\D/g, '')) || 0;
-                const idB = Number(String(b.id).replace(/\D/g, '')) || 0;
-                return idA - idB;
-            });
-
-            let calculatedCash = 0;
-            let totalContributed = 0;
-            let husbandContributed = 0;
-            let wifeContributed = 0;
-            let jointContributed = 0;
-            let totalDividends = 0;
-
-            sortedFlows.forEach(flow => {
-                const amt = Number(flow.amount || 0);
-                const typeStr = String(flow.type || "");
-
-                if (typeStr === "存入" || typeStr.includes("存入")) {
-                    calculatedCash += amt;
-                    totalContributed += amt;
-                    if (flow.contributor === husbandName) {
-                        husbandContributed += amt;
-                    } else if (flow.contributor === wifeName) {
-                        wifeContributed += amt;
-                    } else {
-                        jointContributed += amt;
-                    }
-                } else if (typeStr === "股息流入" || typeStr.includes("股息") || typeStr.includes("配息")) {
-                    calculatedCash += amt;
-                    totalDividends += amt;
-                } else if (typeStr === "證券交割支出" || typeStr.includes("支出") || typeStr.includes("交割")) {
-                    calculatedCash -= Math.abs(amt);
-                } else if (typeStr === "活存利息" || typeStr.includes("利息")) {
-                    // 活存利息收入
-                    calculatedCash += amt;
-                } else {
-                    // 其他自訂收支項目
-                    calculatedCash += amt;
-                }
-            });
-
-            // 🚨 關鍵修正：優先使用試算表最新一筆的 account_balance 作為 Single Source of Truth！
-            // 如此一來不論試算表中有任何自訂扣款、退稅或活存利息，看板金額必定與流水帳 100% 相符
-            const latestFlow = sortedFlows[sortedFlows.length - 1];
-            const cashBalance = (latestFlow && latestFlow.account_balance !== undefined && latestFlow.account_balance !== "")
-                ? Number(latestFlow.account_balance)
-                : calculatedCash;
-
-            let totalStockValue = 0;
-            let totalStockCost = 0;
-            let totalUnrealizedPnL = 0;
-
-            state.inventory.forEach(inv => {
-                totalStockValue += Number(inv.market_value || 0);
-                
-                // 關鍵自動容錯與動態本金計算
-                const cost = Number(inv.total_investment) || (Number(inv.avg_cost || 0) * Number(inv.total_shares || 0));
-                totalStockCost += cost;
-                
-                totalUnrealizedPnL += Number(inv.unrealized_pnl || 0);
-            });
-
-            const totalAssets = cashBalance + totalStockValue;
-            const overallRoi = totalStockCost > 0 ? (totalUnrealizedPnL / totalStockCost) * 100 : 0;
-
-            document.getElementById('card-total-assets').textContent = `$${formatNumber(totalAssets)}`;
-            document.getElementById('card-stock-value').textContent = `$${formatNumber(totalStockValue)}`;
-            document.getElementById('card-cash-balance').textContent = `$${formatNumber(cashBalance)}`;
-            document.getElementById('card-total-contributed').textContent = `$${formatNumber(totalContributed)}`;
-            document.getElementById('card-total-dividends').textContent = `$${formatNumber(totalDividends)}`;
-
-            const pnlElement = document.getElementById('card-unrealized-pnl');
-            const roiElement = document.getElementById('card-roi');
-            const bgIndicator = document.getElementById('pnl-bg-indicator');
-
-            const formattedPnL = (totalUnrealizedPnL >= 0 ? "+" : "") + formatNumber(totalUnrealizedPnL);
-            const formattedRoi = (totalUnrealizedPnL >= 0 ? "+" : "") + overallRoi.toFixed(2) + "%";
-
-            pnlElement.textContent = `$${formattedPnL}`;
-            roiElement.textContent = formattedRoi;
-
-            if (totalUnrealizedPnL >= 0) {
-                pnlElement.className = "text-3xl font-extrabold text-red-500 mt-2";
-                roiElement.className = "font-bold text-red-500";
-                bgIndicator.className = "absolute right-3 top-3 opacity-10 text-red-500";
-                bgIndicator.innerHTML = `<i data-lucide="trending-up" class="w-16 h-16"></i>`;
-            } else {
-                pnlElement.className = "text-3xl font-extrabold text-emerald-400 mt-2";
-                roiElement.className = "font-bold text-emerald-400";
-                bgIndicator.className = "absolute right-3 top-3 opacity-10 text-emerald-400";
-                bgIndicator.innerHTML = `<i data-lucide="trending-down" class="w-16 h-16"></i>`;
-            }
-
-            renderContributionChart(husbandContributed, wifeContributed, jointContributed, husbandName, wifeName);
-            renderAssetAllocationChart(cashBalance, state.inventory);
-
-            // 今日交易戰報 (手機端響應式合併與隐藏優化)
-            const todayStr = formatDateTaipei(new Date());
-            const todayTrans = state.transactions.filter(t => formatDateTaipei(t.date) === todayStr);
-            const todayBody = document.getElementById('today-transactions-body');
-            
-            if (todayTrans.length === 0) {
-                todayBody.innerHTML = `
-                    <tr>
-                        <td colspan="5" class="px-4 py-8 text-center text-slate-500">
-                            今日無交易買賣。下單後點選「新增交易紀錄」，將同步更新於此，方便直接截圖發到群組。
-                        </td>
-                    </tr>
-                `;
-            } else {
-                todayBody.innerHTML = todayTrans.map(t => {
-                    const typeBadge = t.action === "買入" 
-                        ? `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] sm:text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">買入</span>`
-                        : `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] sm:text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">賣出</span>`;
-                    return `
-                        <tr class="hover:bg-slate-900/40">
-                            <td class="px-3 sm:px-4 py-3 whitespace-nowrap">${typeBadge}</td>
-                            <td class="px-3 sm:px-4 py-3">
-                                <div class="font-semibold text-slate-200">${t.stock_code} <span class="text-[10px] sm:text-xs text-slate-400 font-normal">${t.stock_name}</span></div>
-                                <!-- 手機版專屬折疊資訊 (單價與股數)，消除 Scrollbar -->
-                                <div class="text-[10px] text-slate-400 font-mono mt-0.5 sm:hidden">
-                                    ${formatNumber(t.shares)} 股 × $${formatNumber(t.price, 2)}
-                                </div>
-                            </td>
-                            <td class="px-3 sm:px-4 py-3 text-right font-mono hidden sm:table-cell">$${formatNumber(t.price, 2)}</td>
-                            <td class="px-3 sm:px-4 py-3 text-right font-mono hidden sm:table-cell">${formatNumber(t.shares)} 股</td>
-                            <td class="px-3 sm:px-4 py-3 text-right font-mono text-slate-200 font-semibold whitespace-nowrap">$${formatNumber(t.total_amount)}</td>
-                        </tr>
-                    `;
-                }).join('');
-            }
-            lucide.createIcons();
-        }
-
-        function renderCashFlowTable() {
-            const body = document.getElementById('cashflow-table-body');
-            let balance = 0;
-            const sortedFlows = [...state.cashFlow].sort((a, b) => {
-                const dateDiff = new Date(a.date) - new Date(b.date);
-                if (dateDiff !== 0) return dateDiff;
-                const idA = Number(String(a.id).replace(/\D/g, '')) || 0;
-                const idB = Number(String(b.id).replace(/\D/g, '')) || 0;
-                return idA - idB;
-            });
-            
-            const renderedFlows = sortedFlows.map(flow => {
-                const amt = Number(flow.amount || 0);
-                const typeStr = String(flow.type || "");
-                if (typeStr.includes("存入") || typeStr.includes("股息") || typeStr.includes("利息") || typeStr.includes("收入")) {
-                    balance += amt;
-                } else if (typeStr.includes("支出") || typeStr.includes("交割")) {
-                    balance -= Math.abs(amt);
-                } else {
-                    balance += amt;
-                }
-                return { ...flow, calculatedBalance: balance };
-            }).reverse();
-
-            if (renderedFlows.length === 0) {
-                body.innerHTML = `<tr><td colspan="8" class="px-6 py-10 text-center text-slate-500">尚無現金流水帳，點擊右上方新增。</td></tr>`;
-                return;
-            }
-
-            body.innerHTML = renderedFlows.map(flow => {
-                let typeClass = "";
-                let amtPrefix = "";
-                const typeStr = String(flow.type || "");
-
-                if (typeStr.includes("存入")) {
-                    typeClass = "bg-indigo-500/10 text-indigo-400 border-indigo-500/20";
-                    amtPrefix = "+";
-                } else if (typeStr.includes("股息") || typeStr.includes("利息")) {
-                    typeClass = "bg-amber-500/10 text-amber-400 border-amber-500/20";
-                    amtPrefix = Number(flow.amount) >= 0 ? "+" : "";
-                } else {
-                    typeClass = "bg-slate-800 text-slate-400 border-slate-700";
-                    amtPrefix = "-";
-                }
-
-                const finalBalance = flow.account_balance ? Number(flow.account_balance) : flow.calculatedBalance;
-
-                return `
-                    <tr class="hover:bg-slate-900/50">
-                        <td class="px-6 py-4 font-mono text-xs text-slate-500">${flow.id || '-'}</td>
-                        <td class="px-6 py-4 text-slate-300 font-mono">${formatDateTaipei(flow.date)}</td>
-                        <td class="px-6 py-4 font-semibold text-slate-200">${flow.contributor}</td>
-                        <td class="px-6 py-4">
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${typeClass}">
-                                ${flow.type}
-                            </span>
-                        </td>
-                        <td class="px-6 py-4 text-slate-400 font-mono">${flow.stock_code || '-'}</td>
-                        <td class="px-6 py-4 text-right font-mono font-bold ${amtPrefix === '+' || Number(flow.amount) >= 0 ? 'text-red-400' : 'text-slate-300'}">
-                            ${amtPrefix}$${formatNumber(flow.amount)}
-                        </td>
-                        <td class="px-6 py-4 text-right font-mono text-slate-200 font-semibold">$${formatNumber(finalBalance)}</td>
-                        <td class="px-6 py-4 text-slate-400 max-w-xs truncate">${flow.note || ''}</td>
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        function renderTransactionsTable() {
-            const body = document.getElementById('transactions-table-body');
-            const sorted = [...state.transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
-
-            if (sorted.length === 0) {
-                body.innerHTML = `<tr><td colspan="8" class="px-6 py-10 text-center text-slate-500">尚無交易紀錄，點擊右上方新增。</td></tr>`;
-                return;
-            }
-
-            body.innerHTML = sorted.map(t => {
-                const actionBadge = t.action === "買入"
-                    ? `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">買入</span>`
-                    : `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">賣出</span>`;
-                return `
-                    <tr class="hover:bg-slate-900/50">
-                        <td class="px-6 py-4 text-slate-300 font-mono">${formatDateTaipei(t.date)}</td>
-                        <td class="px-6 py-4 font-bold text-slate-200">${t.stock_code} <span class="text-xs text-slate-400 font-normal">${t.stock_name}</span></td>
-                        <td class="px-6 py-4">${actionBadge}</td>
-                        <td class="px-6 py-4 text-right font-mono">$${formatNumber(t.price, 2)}</td>
-                        <td class="px-6 py-4 text-right font-mono">${formatNumber(t.shares)} 股</td>
-                        <td class="px-6 py-4 text-right font-mono text-slate-400">$${formatNumber(t.fee)}</td>
-                        <td class="px-6 py-4 text-right font-mono text-slate-400">$${formatNumber(t.tax || 0)}</td>
-                        <td class="px-6 py-4 text-right font-mono text-white font-bold">$${formatNumber(t.total_amount)}</td>
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        // 渲染持股庫存 Table (買入成本與目前市價強制呈現2位小數點)
-        function renderInventoryTable() {
-            const body = document.getElementById('inventory-table-body');
-            
-            if (state.inventory.length === 0) {
-                body.innerHTML = `<tr><td colspan="8" class="px-6 py-10 text-center text-slate-500">目前庫存空空如也，快去買進第一檔股票吧！</td></tr>`;
-                return;
-            }
-
-            body.innerHTML = state.inventory.map(inv => {
-                const pnl = Number(inv.unrealized_pnl || 0);
-                const roi = Number(inv.roi || 0) * 100;
-                const pnlClass = pnl >= 0 ? 'text-red-500 font-bold' : 'text-emerald-400 font-bold';
-                const pnlPrefix = pnl >= 0 ? '+' : '';
-
-                // 🚨 智慧自動推算累計投入本金 (容錯與自動計算)：
-                // 讀取 Google Sheets 時若該欄位沒有值，自動由 平均買入成本 * 庫存股數 算出
-                const calculatedCost = Number(inv.total_investment) || (Number(inv.avg_cost || 0) * Number(inv.total_shares || 0));
-
-                return `
-                    <tr class="hover:bg-slate-900/50">
-                        <td class="px-6 py-4 font-bold text-slate-200">${inv.stock_code} <span class="text-xs text-slate-400 font-normal block">${inv.stock_name || '台股'}</span></td>
-                        <td class="px-6 py-4 text-right font-mono">${formatNumber(inv.total_shares)} 股</td>
-                        <td class="px-6 py-4 text-right font-mono text-slate-400">$${formatNumber(inv.avg_cost, 2)}</td>
-                        <td class="px-6 py-4 text-right font-mono text-slate-300">$${formatNumber(calculatedCost)}</td>
-                        <td class="px-6 py-4 text-right font-mono font-bold text-slate-100">$${formatNumber(inv.current_price, 2)}</td>
-                        <td class="px-6 py-4 text-right font-mono font-bold text-slate-100">$${formatNumber(inv.market_value)}</td>
-                        <td class="px-6 py-4 text-right font-mono ${pnlClass}">${pnlPrefix}$${formatNumber(pnl)}</td>
-                        <td class="px-6 py-4 text-right font-mono ${pnlClass}">${pnlPrefix}${roi.toFixed(2)}%</td>
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        // --- 5. 出資與資產比重圖表渲染 (Chart.js) (調整為完全支援動態出資人代名) ---
-        function renderContributionChart(husband, wife, joint, husbandName, wifeName) {
-            const ctx = document.getElementById('contributionChart').getContext('2d');
-            const total = husband + wife + joint;
-            
-            const husbandPct = total > 0 ? ((husband / total) * 100).toFixed(1) : 0;
-            const wifePct = total > 0 ? ((wife / total) * 100).toFixed(1) : 0;
-            const jointPct = total > 0 ? ((joint / total) * 100).toFixed(1) : 0;
-
-            const legendContainer = document.getElementById('contribution-legend');
-            legendContainer.innerHTML = `
-                <div class="flex items-center justify-between text-xs">
-                    <span class="flex items-center gap-1.5"><span class="w-3 h-3 bg-indigo-500 rounded-full"></span>${husbandName} 投入</span>
-                    <span class="font-mono text-slate-300 font-bold">$${formatNumber(husband)} (${husbandPct}%)</span>
-                </div>
-                <div class="flex items-center justify-between text-xs">
-                    <span class="flex items-center gap-1.5"><span class="w-3 h-3 bg-pink-500 rounded-full"></span>${wifeName} 投入</span>
-                    <span class="font-mono text-slate-300 font-bold">$${formatNumber(wife)} (${wifePct}%)</span>
-                </div>
-                <div class="flex items-center justify-between text-xs">
-                    <span class="flex items-center gap-1.5"><span class="w-3 h-3 bg-amber-500 rounded-full"></span>共同存款</span>
-                    <span class="font-mono text-slate-300 font-bold">$${formatNumber(joint)} (${jointPct}%)</span>
-                </div>
-            `;
-
-            if (contributionChartInstance) contributionChartInstance.destroy();
-
-            contributionChartInstance = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: [husbandName, wifeName, '共同存款'],
-                    datasets: [{
-                        data: [husband, wife, joint],
-                        backgroundColor: ['#6366f1', '#ec4899', '#f59e0b'],
-                        borderWidth: 0,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    cutout: '70%'
-                }
-            });
-        }
-
-        function renderAssetAllocationChart(cash, inventoryList) {
-            const ctx = document.getElementById('assetAllocationChart').getContext('2d');
-            
-            let stockTotal = 0;
-            const labels = ['現金'];
-            const data = [cash];
-            const colors = ['#10b981'];
-
-            inventoryList.forEach((inv, index) => {
-                stockTotal += Number(inv.market_value || 0);
-                labels.push(`${inv.stock_code} ${inv.stock_name || ''}`);
-                data.push(Number(inv.market_value || 0));
-                const hue = (210 + (index * 45)) % 360;
-                colors.push(`hsl(${hue}, 80%, 60%)`);
-            });
-
-            const grandTotal = cash + stockTotal;
-            const listContainer = document.getElementById('asset-allocation-list');
-            
-            let listHtml = `
-                <div class="flex justify-between items-center text-xs pb-1 border-b border-slate-800">
-                    <span class="text-slate-400">資產類別 / 股票</span>
-                    <span class="text-slate-400">總值 (比例)</span>
-                </div>
-                <div class="flex justify-between items-center text-xs">
-                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 bg-emerald-500 rounded-full"></span>現金</span>
-                    <span class="font-semibold text-slate-200 font-mono">$${formatNumber(cash)} (${grandTotal > 0 ? ((cash/grandTotal)*100).toFixed(1) : 0}%)</span>
-                </div>
-            `;
-
-            inventoryList.forEach((inv, index) => {
-                const color = colors[index + 1];
-                const pct = grandTotal > 0 ? ((inv.market_value / grandTotal) * 100).toFixed(1) : 0;
-                listHtml += `
-                    <div class="flex justify-between items-center text-xs">
-                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full" style="background-color: ${color}"></span>${inv.stock_code} ${inv.stock_name || '台股'}</span>
-                        <span class="font-semibold text-slate-200 font-mono">$${formatNumber(inv.market_value)} (${pct}%)</span>
-                    </div>
-                `;
-            });
-            listContainer.innerHTML = listHtml;
-
-            if (assetAllocationChartInstance) assetAllocationChartInstance.destroy();
-
-            assetAllocationChartInstance = new Chart(ctx, {
-                type: 'pie',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        data: data,
-                        backgroundColor: colors,
-                        borderWidth: 0,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } }
-                }
-            });
-        }
-
-        // --- 6. 介面 Tabs 操作與彈窗機制 ---
-        // 介面控制
-        function toggleTab(tabId) {
-            document.getElementById('tab-content-dashboard').classList.add('hidden');
-            document.getElementById('tab-content-cash-flow').classList.add('hidden');
-            document.getElementById('tab-content-inventory').classList.add('hidden');
-            document.getElementById('tab-content-transactions').classList.add('hidden');
-            document.getElementById('tab-content-settings').classList.add('hidden');
-
-            const buttons = ['dashboard', 'cash-flow', 'inventory', 'transactions'];
-            buttons.forEach(b => {
-                const btn = document.getElementById(`tab-btn-${b}`);
-                if (btn) {
-                    btn.className = "px-4 py-2.5 border-b-2 border-transparent font-medium text-sm text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap transition-all";
-                }
-            });
-
-            document.getElementById(`tab-content-${tabId}`).classList.remove('hidden');
-            const activeBtn = document.getElementById(`tab-btn-${tabId}`);
-            if (activeBtn) {
-                activeBtn.className = "px-4 py-2.5 border-b-2 border-indigo-500 font-medium text-sm text-indigo-400 flex items-center gap-2 whitespace-nowrap transition-all";
-            }
-        }
-
-        function openModal(modalId) {
-            document.getElementById(modalId).classList.remove('hidden');
-        }
-
-        function closeModal(modalId) {
-            document.getElementById(modalId).classList.add('hidden');
-        }
-
-        function toggleStockCodeInput() {
-            const type = document.getElementById('cf-type').value;
-            const wrapper = document.getElementById('cf-stock-code-wrapper');
-            if (type === "證券交割支出" || type === "股息流入") {
-                wrapper.classList.remove('hidden');
-            } else {
-                wrapper.classList.add('hidden');
-                document.getElementById('cf-stock-code').value = "";
-            }
-        }
-
-        // --- 7. 表單提交與同步邏輯 ---
-        async function submitCashFlow(event) {
-            event.preventDefault();
-            const date = document.getElementById('cf-date').value;
-            const contributor = document.getElementById('cf-contributor').value;
-            const type = document.getElementById('cf-type').value;
-            const stock_code = document.getElementById('cf-stock-code').value;
-            const amount = Number(document.getElementById('cf-amount').value);
-            const note = document.getElementById('cf-note').value;
-
-            const rowData = [
-                "FLOW_" + Date.now(),
-                date,
-                contributor,
-                type,
-                stock_code,
-                amount,
-                note
-            ];
-
-            showLoadingToast("正在將現金流水寫入雲端...");
-
-            if (state.isDemo) {
-                const newFlow = { id: rowData[0], date, contributor, type, stock_code, amount, note };
-                const flows = JSON.parse(localStorage.getItem('demo_cash_flow')) || DEFAULT_CASH_FLOW;
-                flows.push(newFlow);
-                localStorage.setItem('demo_cash_flow', JSON.stringify(flows));
-                closeModal('cashflow-modal');
-                document.getElementById('cashflow-form').reset();
-                await reloadData();
-            } else {
-                try {
-                    const res = await fetch(state.apiUrl, {
-                        method: 'POST',
-                        body: JSON.stringify({
-                            targetSheet: "users_cash_flow",
-                            rowData: rowData
-                        })
-                    });
-                    const result = await res.json();
-                    if (result.status === "success") {
-                        closeModal('cashflow-modal');
-                        document.getElementById('cashflow-form').reset();
-                        await reloadData();
-                        showToast("現金流水帳儲存成功！", "check-circle", "text-emerald-400");
-                    } else {
-                        showToast("儲存失敗：" + result.message, "alert-circle", "text-red-400");
-                    }
-                } catch (err) {
-                    showToast("同步雲端失敗，請確認 Apps Script 已部署為「所有人」！", "alert-circle", "text-red-400");
-                }
-            }
-        }
-
-        async function submitTransaction(event) {
-            event.preventDefault();
-            const date = document.getElementById('tx-date').value;
-            const action = document.getElementById('tx-action').value;
-            const stock_code = document.getElementById('tx-code').value;
-            const stock_name = document.getElementById('tx-name').value;
-            const price = Number(document.getElementById('tx-price').value);
-            const shares = Number(document.getElementById('tx-shares').value);
-            const fee = Number(document.getElementById('tx-fee').value);
-            const tax = Number(document.getElementById('tx-tax').value);
-
-            let total_amount = price * shares;
-            if (action === "買入") {
-                total_amount += fee;
-            } else {
-                total_amount = total_amount - fee - tax;
-            }
-
-            const rowData = [
-                "TX_" + Date.now(),
-                date,
-                stock_code,
-                stock_name,
-                action,
-                price,
-                shares,
-                fee,
-                tax,
-                total_amount,
-                "" // 移除經手人
-            ];
-
-            showLoadingToast("正在將交易寫入試算表...");
-
-            if (state.isDemo) {
-                const newTx = {
-                    id: rowData[0], date, stock_code, stock_name, action, price, shares, fee, tax, total_amount
-                };
-                const txs = JSON.parse(localStorage.getItem('demo_transactions')) || DEFAULT_TRANSACTIONS;
-                txs.push(newTx);
-                localStorage.setItem('demo_transactions', JSON.stringify(txs));
-
-                const flows = JSON.parse(localStorage.getItem('demo_cash_flow')) || DEFAULT_CASH_FLOW;
-                flows.push({
-                    id: "FLOW_" + Date.now(),
-                    date,
-                    contributor: "共同",
-                    type: "證券交割支出",
-                    stock_code: stock_code,
-                    amount: total_amount,
-                    note: `系統自動連動交割: 買入 ${stock_name} ${shares} 股`
-                });
-                localStorage.setItem('demo_cash_flow', JSON.stringify(flows));
-
-                closeModal('transaction-modal');
-                document.getElementById('transaction-form').reset();
-                await reloadData();
-            } else {
-                try {
-                    await fetch(state.apiUrl, {
-                        method: 'POST',
-                        body: JSON.stringify({ targetSheet: "daily_transactions", rowData: rowData })
-                    });
-                    
-                    const flowRowData = [
-                        "FLOW_" + Date.now(),
-                        date,
-                        "共同",
-                        "證券交割支出",
-                        stock_code,
-                        total_amount,
-                        `系統自動連動: 交割 ${stock_name} ${shares} 股`
-                    ];
-                    
-                    const resFlow = await fetch(state.apiUrl, {
-                        method: 'POST',
-                        body: JSON.stringify({ targetSheet: "users_cash_flow", rowData: flowRowData })
-                    });
-                    
-                    const resJson = await resFlow.json();
-                    if (resJson.status === "success") {
-                        closeModal('transaction-modal');
-                        document.getElementById('transaction-form').reset();
-                        await reloadData();
-                        showToast("交易登錄成功，現金已自動扣減！", "check-circle", "text-emerald-400");
-                    } else {
-                        showToast("儲存現金連動失敗", "alert-circle", "text-red-400");
-                    }
-                } catch (err) {
-                    showToast("同步試算表失敗，請重試！", "alert-circle", "text-red-400");
-                }
-            }
-        }
-
-        // --- 8. 設定管理 ---
-        function saveApiSettings() {
-            const url = document.getElementById('settings-api-url').value.trim();
-            const husbandInput = document.getElementById('settings-husband-name').value.trim();
-            const wifeInput = document.getElementById('settings-wife-name').value.trim();
-
-            if (url) {
-                const validation = validateGasUrl(url);
-                if (!validation.valid) {
-                    showToast("網址驗證失敗：" + validation.reason, "alert-triangle", "text-rose-400");
-                    return; // 阻擋儲存，防禦性開發
-                }
-                localStorage.setItem("sheet_api_url", url);
-            }
-            
-            // 儲存姓名客製化設定
-            localStorage.setItem("husband_name", husbandInput);
-            localStorage.setItem("wife_name", wifeInput);
-
-            showToast("所有設定已儲存！即將自動刷新...", "check-circle", "text-emerald-400");
-            setTimeout(() => {
-                window.location.reload();
-            }, 1500);
-        }
-
-        // 智慧重置
-        function resetToDemo() {
-            localStorage.removeItem("sheet_api_url");
-            localStorage.removeItem("demo_cash_flow");
-            localStorage.removeItem("demo_transactions");
-            localStorage.removeItem("husband_name");
-            localStorage.removeItem("wife_name");
-            showToast("已重置為 DEMO 測試模式，正在重刷...", "check-circle", "text-emerald-400");
-            setTimeout(() => {
-                window.location.reload();
-            }, 1500);
-        }
-
-        function copyAppsScriptCode() {
-            const code = document.getElementById('apps-script-code-block').innerText;
-            const textarea = document.createElement('textarea');
-            textarea.value = code;
-            document.body.appendChild(textarea);
-            textarea.select();
-            document.execCommand('copy');
-            document.body.removeChild(textarea);
-            showToast("Apps Script 語法已複製至剪貼簿！", "copy", "text-indigo-400");
-        }
-
-        // --- 9. 格式化工具 ---
-        // 智慧轉型與小數格式化
-        function formatNumber(num, decimals = 0) {
-            return Number(num || 0).toLocaleString('zh-TW', { 
-                minimumFractionDigits: decimals,
-                maximumFractionDigits: decimals 
-            });
-        }
-
-        function showToast(message, iconName = "check-circle", iconColor = "text-emerald-400") {
-            const toast = document.getElementById('toast');
-            const toastMsg = document.getElementById('toast-message');
-            const toastIcon = document.getElementById('toast-icon');
-
-            toastMsg.textContent = message;
-            toastIcon.className = `w-5 h-5 ${iconColor}`;
-            toastIcon.setAttribute('data-lucide', iconName);
-            lucide.createIcons();
-
-            toast.classList.remove('translate-y-20', 'opacity-0');
-            toast.classList.add('translate-y-0', 'opacity-100');
-
-            setTimeout(() => {
-                toast.classList.add('translate-y-20', 'opacity-0');
-                toast.classList.remove('translate-y-0', 'opacity-100');
-            }, 3000);
-        }
-
-        function showLoadingToast(message) {
-            showToast(message, "loader", "text-indigo-400 animate-spin");
-        }
-    </script>
+    <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
