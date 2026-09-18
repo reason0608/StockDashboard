@@ -97,7 +97,7 @@ export function relevantEvents(feed: Feed, holdings: Holding[], ledger: Ledger, 
   const codes = new Set([...holdings.map(h => String(h.stock_code).trim()), ...transactionCodes]);
   const events = new Map(Object.values(ledger.confirmations).map(c => [c.event.id, c.event]));
   for (const event of feed.events) if (codes.has(event.stockCode) || events.has(event.id)) events.set(event.id, event);
-  return [...events.values()].sort((a, b) => (a.paymentDate || a.exDate).localeCompare(b.paymentDate || b.exDate));
+  return [...events.values()].sort((a, b) => (b.paymentDate || b.exDate).localeCompare(a.paymentDate || a.exDate));
 }
 
 /** 使用台北日期判斷發放日與過期狀態。 */

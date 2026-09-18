@@ -16,6 +16,10 @@ test('既有分頁與新增交易表單可操作，重新整理 hash 保留分�
   await expect(page.locator('#card-total-assets')).not.toHaveText('$0');
   await page.locator('#tab-btn-inventory').click();
   await expect(page.locator('#inventory-table-body')).toContainText('2330');
+  await expect(page.locator('#tab-content-inventory')).toContainText('已領股息');
+  await expect(page.locator('#tab-content-inventory')).toContainText('未實現損益（不含息）');
+  await expect(page.locator('#tab-content-inventory')).toContainText('含息報酬率');
+  await expect(page.locator('#inventory-table-body')).toContainText(',500.00');
   await page.reload();
   await expect(page.locator('#tab-content-inventory')).toBeVisible();
   await page.locator('#tab-btn-transactions').click();
@@ -42,20 +46,12 @@ test('發放日到達即自動入帳，重載與賣出後仍保留快照', async
   await expect(page.locator('.dividends tbody')).toContainText('NT$ 110.00');
 });
 
-test('非法備份不寫入，合法備份需確認且可匯出', async ({ page }) => {
+test('股息頁不顯示備份與手動更新控制', async ({ page }) => {
   await page.goto('./#/dividends');
-  await expect(page.getByRole('button', { name: '匯出股息備份' })).toBeEnabled();
-  await page.locator('input[type=file]').setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('{"version":1,"confirmations":{"bad":{}}}') });
-  await expect(page.getByRole('alert')).toContainText('無法匯入');
-  const backup = { version: 1, confirmations: { [fixtureEvent.id]: { event: fixtureEvent, shares: 20, confirmedAt: '2026-07-09', received: true } } };
-  await page.locator('input[type=file]').setInputFiles({ name: 'good.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
-  await expect(page.getByRole('button', { name: '確認匯入' })).toBeVisible();
-  await page.getByRole('button', { name: '確認匯入' }).click();
-  await expect(page.locator('.dividends tbody')).toContainText('NT$ 110.00');
-  await expect(page.locator('.dividends tbody')).toContainText('NT$ 10.00');
-  const download = page.waitForEvent('download');
-  await page.getByRole('button', { name: '匯出股息備份' }).click();
-  expect((await download).suggestedFilename()).toBe('dividends-demo-2026-09-18.json');
+  await expect(page.getByRole('button', { name: '匯出股息備份' })).toHaveCount(0);
+  await expect(page.getByText('匯入股息備份')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '重新讀取公告' })).toHaveCount(0);
+  await expect(page.locator('.dividends tbody')).toContainText('已入帳');
 });
 
 test('公告更新失敗保留快取，手機畫面不超出頁寬', async ({ page }) => {
@@ -63,7 +59,7 @@ test('公告更新失敗保留快取，手機畫面不超出頁寬', async ({ pa
   await page.goto('./#/dividends');
   await expect(page.locator('.dividends tbody')).toContainText('2330');
   await page.route('**/data/dividends.json', route => route.abort());
-  await page.getByRole('button', { name: '重新讀取公告' }).click();
+  await page.reload();
   await expect(page.getByText('公告更新失敗，正在顯示上次成功快取，請留意更新時間。')).toBeVisible();
   await expect(page.locator('.dividends tbody')).toContainText('2330');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

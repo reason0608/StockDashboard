@@ -14,11 +14,9 @@ const portfolioReady = ref(false);
 const loading = ref(false);
 const warning = ref('');
 const error = ref('');
-const notice = ref('');
 const storageError = ref(false);
 const search = ref('');
 const year = ref(taipeiToday().slice(0, 4));
-const pendingImport = ref<Ledger | null>(null);
 const allEvents = computed(() => relevantEvents(feed.value, holdings.value, ledger.value, transactionStockCodes(transactions.value)));
 const years = computed(() => [...new Set([taipeiToday().slice(0, 4), ...allEvents.value.map(e => (e.paymentDate || e.exDate).slice(0, 4))])].sort().reverse());
 const annual = computed(() => allEvents.value.filter(e => (e.paymentDate || e.exDate).startsWith(year.value)));
@@ -68,9 +66,8 @@ function syncPortfolio() {
   isDemo.value = state.isDemo;
   portfolioReady.value = true;
   storageError.value = false;
-  pendingImport.value = null;
   try { ledger.value = loadLedger(isDemo.value); }
-  catch { storageError.value = true; ledger.value = { version: 1, confirmations: {} }; error.value = '股息儲存資料無法讀取，已停止寫入。請先保留瀏覽器資料，再匯入有效備份。'; }
+  catch { storageError.value = true; ledger.value = { version: 1, confirmations: {} }; error.value = '瀏覽器內的自動入帳快照無法讀取，已停止寫入以保護原資料。請確認網站儲存空間未被封鎖。'; }
 }
 /** 更新公開公告，保留已載入內容以避免暫時失敗清空畫面。 */
 async function refresh() {
@@ -102,32 +99,6 @@ function syncAutomaticReceipts() {
   catch { storageError.value = true; error.value = '無法保存自動入帳快照，總覽可能暫時無法計入這些股息。'; }
 }
 
-/** 下載僅含股息快照的本機備份，不包含試算表 URL 或 API 金鑰。 */
-function exportBackup() {
-  const blob = new Blob([JSON.stringify(ledger.value, null, 2)], { type: 'application/json;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = `dividends-${isDemo.value ? 'demo' : 'personal'}-${taipeiToday()}.json`; a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-/** 匯入前驗證並顯示筆數供檢閱，尚未覆寫現有紀錄。 */
-async function previewImport(event: Event) {
-  const input = event.target as HTMLInputElement;
-  try {
-    const file = input.files?.[0]; if (!file) return;
-    if (file.size > 5 * 1024 * 1024) throw new Error('備份不可超過 5 MB。');
-    pendingImport.value = parseLedger(JSON.parse(await file.text())); error.value = '';
-  } catch (e) { pendingImport.value = null; error.value = `無法匯入：${(e as Error).message}`; }
-  finally { input.value = ''; }
-}
-/** 使用者確認後合併備份，同事件由備份取代，其他紀錄仍保留。 */
-function applyImport() {
-  if (!pendingImport.value) return;
-  try {
-    persist({ version: 1, confirmations: { ...ledger.value.confirmations, ...pendingImport.value.confirmations } });
-    syncAutomaticReceipts();
-    pendingImport.value = null; storageError.value = false; notice.value = '股息備份已匯入。'; error.value = '';
-  } catch (e) { error.value = `備份未寫入：${(e as Error).message}`; }
-}
 watch([feed, transactions, portfolioReady], syncAutomaticReceipts, { deep: true });
 onMounted(() => { window.addEventListener('portfolio-updated', syncPortfolio); void refresh(); });
 onUnmounted(() => window.removeEventListener('portfolio-updated', syncPortfolio));
@@ -137,21 +108,11 @@ onUnmounted(() => window.removeEventListener('portfolio-updated', syncPortfolio)
   <div class="dividends space-y-6">
     <div class="flex flex-wrap items-start justify-between gap-4">
       <div><p class="text-xs font-semibold tracking-widest text-indigo-400 mb-2">DIVIDEND CALENDAR</p><h2 class="text-2xl font-bold">股息追蹤</h2><p class="text-sm text-slate-400 mt-2">掌握每次除息、預計入帳日與自己的配息股數。</p></div>
-      <div class="flex gap-2 flex-wrap">
-        <button class="secondary" :disabled="loading" @click="refresh">{{ loading ? '載入中…' : '重新讀取公告' }}</button>
-        <button class="secondary" :disabled="!portfolioReady || storageError" @click="exportBackup">匯出股息備份</button>
-        <label class="secondary cursor-pointer">匯入股息備份<input type="file" accept=".json,application/json" class="sr-only" :disabled="!portfolioReady" @change="previewImport"></label>
-      </div>
     </div>
     <p v-if="!portfolioReady" class="banner">正在載入持股資料…</p>
     <p v-if="portfolioReady && isDemo" class="banner">目前為 Demo 持股。股息公告是真實市場資料，預估金額僅依示範持股試算；確認紀錄與個人模式分開保存。</p>
     <p v-if="warning" class="banner" role="status">{{ warning }}</p>
     <p v-if="error" class="banner border-rose-500/40 text-rose-300" role="alert">{{ error }}</p>
-    <p v-if="notice" class="text-sm text-emerald-300" role="status">{{ notice }}</p>
-    <div v-if="pendingImport" class="panel flex flex-wrap items-center gap-3">
-      <p>即將合併 {{ Object.keys(pendingImport.confirmations).length }} 筆紀錄至{{ isDemo ? ' Demo ' : '個人' }}模式，同一次配息會由備份取代。</p>
-      <button class="primary" @click="applyImport">確認匯入</button><button class="secondary" @click="pendingImport = null">取消</button>
-    </div>
     <div class="flex flex-wrap items-center gap-4 text-sm">
       <label>年度 <select v-model="year" class="field ml-2"><option v-for="y in years" :key="y">{{ y }}</option></select></label>
       <span class="text-slate-400">按發放年度統計；發放日未公告時暫以除息年度歸類。</span>
@@ -176,16 +137,15 @@ onUnmounted(() => window.removeEventListener('portfolio-updated', syncPortfolio)
       <div class="p-5 flex flex-wrap items-center justify-between gap-3"><h3 class="font-semibold">我的配息紀錄</h3><input v-model="search" class="field" type="search" aria-label="搜尋配息股票" placeholder="搜尋股票代號或名稱"></div>
       <div class="overflow-x-auto">
         <table class="w-full text-sm text-left whitespace-nowrap">
-          <thead class="bg-slate-950/50 text-slate-400"><tr><th>股票</th><th>除息日</th><th>發放日</th><th>每股／單位</th><th>自動股數</th><th>稅前總額</th><th>匯費</th><th>預估淨額</th><th>狀態</th><th>操作</th></tr></thead>
+          <thead class="bg-slate-950/50 text-slate-400"><tr><th>股票</th><th>除息日</th><th>發放日</th><th>每股／單位</th><th>自動股數</th><th>稅前總額</th><th>匯費</th><th>預估淨額</th><th>狀態</th></tr></thead>
           <tbody class="divide-y divide-slate-800">
             <tr v-for="event in visible" :key="event.id">
               <td><strong>{{ event.stockCode }}</strong><p class="text-slate-400 text-xs mt-1">{{ event.stockName }}</p><a :href="event.sourceUrl" target="_blank" rel="noopener noreferrer" class="text-xs text-indigo-400">{{ event.source }}</a><p class="text-xs text-slate-500">資料 {{ event.updatedAt.slice(0, 10) }}</p></td>
               <td>{{ event.exDate }}</td><td>{{ event.paymentDate || '未公告' }}</td><td>{{ event.cashPerShare === null ? '未公告' : event.cashPerShare.toLocaleString('zh-TW', { maximumFractionDigits: 8 }) }}</td>
               <td><span v-if="shareCount(event) !== null">{{ shareCount(event)?.toLocaleString('zh-TW') }}</span><span v-else class="text-rose-300">無法計算</span></td><td>{{ money(grossAmount(event)) }}</td><td>{{ money(DEFAULT_REMITTANCE_FEE) }}</td><td class="font-mono text-indigo-200">{{ money(netAmount(event)) }}</td>
               <td><span class="text-xs rounded-full bg-slate-800 px-2 py-1">{{ statusText(event) }}</span><p v-if="revised(event)" class="text-xs text-amber-300 mt-2">公告有修正，請重新核對</p></td>
-              <td><span class="text-xs text-slate-400">依發放日自動判定</span></td>
             </tr>
-            <tr v-if="!visible.length"><td colspan="10" class="!py-10 text-center text-slate-400">{{ loading ? '正在讀取公告…' : search ? '沒有符合搜尋條件的紀錄。' : '目前沒有此年度可顯示的配息公告。未查到資料不代表不配息。' }}</td></tr>
+            <tr v-if="!visible.length"><td colspan="9" class="!py-10 text-center text-slate-400">{{ loading ? '正在讀取公告…' : search ? '沒有符合搜尋條件的紀錄。' : '目前沒有此年度可顯示的配息公告。未查到資料不代表不配息。' }}</td></tr>
           </tbody>
         </table>
       </div>
@@ -194,7 +154,7 @@ onUnmounted(() => window.removeEventListener('portfolio-updated', syncPortfolio)
     <div class="text-xs text-slate-400 space-y-2">
       <p :class="stale ? 'text-amber-300' : ''">公告快照：{{ feed.updatedAt ? new Date(feed.updatedAt).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' }) : '尚未更新' }}（台北時間）{{ stale ? '・資料可能已過期' : '' }}</p>
       <p v-for="source in feed.sources" :key="source.name" :class="source.error ? 'text-amber-300' : ''">{{ source.name }}：{{ source.updatedAt ? new Date(source.updatedAt).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' }) : '尚未成功' }}{{ source.error ? `・${source.error}` : '' }}</p>
-      <p>股數直接依每日交易紀錄推算；每筆匯費固定為 NT$10，發放日到達後自動保存入帳快照於這個瀏覽器，不會同步 Google Sheets。可透過股息備份搬移至其他裝置。</p>
+      <p>股數直接依每日交易紀錄推算；每筆匯費固定為 NT$10。每次重新整理頁面都會自動讀取最新公告，並在發放日到達後保存入帳快照。</p>
     </div>
   </div>
 </template>

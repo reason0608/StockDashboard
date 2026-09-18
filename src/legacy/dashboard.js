@@ -3,7 +3,7 @@ import { renderContributionChart, renderAssetAllocationChart } from './charts.js
 import { escapeHtml, formatNumber } from '../shared/format.js';
 import { toggleTab } from '../router';
 import { loadLedger } from '../services/dividends';
-import { realizedDividends } from '../domain/entitlements';
+import { realizedDividends, realizedDividendsByStock } from '../domain/entitlements';
 
         // =========================================================================
         // ⚙️ 統一雲端連線設定：在此處貼上您的 Google Apps Script Web App URL。
@@ -134,7 +134,7 @@ import { realizedDividends } from '../domain/entitlements';
         // --- 2. 系統啟動與數據整合載入 ---
         export async function initializeDashboard() {
             bindSettingsValidation();
-            window.addEventListener('dividend-ledger-updated', renderDashboard);
+            window.addEventListener('dividend-ledger-updated', () => { renderDashboard(); renderInventoryTable(); });
             // 優先讀取 LocalStorage 自訂覆蓋，若無則採用全域預設之 DEFAULT_API_URL
             state.apiUrl = localStorage.getItem("sheet_api_url") || DEFAULT_API_URL;
             
@@ -498,7 +498,7 @@ import { realizedDividends } from '../domain/entitlements';
             }).reverse();
 
             if (renderedFlows.length === 0) {
-                body.innerHTML = `<tr><td colspan="8" class="px-6 py-10 text-center text-slate-500">尚無現金流水帳，點擊右上方新增。</td></tr>`;
+                body.innerHTML = `<tr><td colspan="10" class="px-6 py-10 text-center text-slate-500">尚無現金流水帳，點擊右上方新增。</td></tr>`;
                 return;
             }
 
@@ -546,7 +546,7 @@ import { realizedDividends } from '../domain/entitlements';
             const sorted = [...state.transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
 
             if (sorted.length === 0) {
-                body.innerHTML = `<tr><td colspan="8" class="px-6 py-10 text-center text-slate-500">尚無交易紀錄，點擊右上方新增。</td></tr>`;
+                body.innerHTML = `<tr><td colspan="10" class="px-6 py-10 text-center text-slate-500">尚無交易紀錄，點擊右上方新增。</td></tr>`;
                 return;
             }
 
@@ -574,19 +574,27 @@ import { realizedDividends } from '../domain/entitlements';
             const body = document.getElementById('inventory-table-body');
             
             if (state.inventory.length === 0) {
-                body.innerHTML = `<tr><td colspan="8" class="px-6 py-10 text-center text-slate-500">目前庫存空空如也，快去買進第一檔股票吧！</td></tr>`;
+                body.innerHTML = `<tr><td colspan="10" class="px-6 py-10 text-center text-slate-500">目前庫存空空如也，快去買進第一檔股票吧！</td></tr>`;
                 return;
             }
+
+            let dividendsByStock = {};
+            try { dividendsByStock = realizedDividendsByStock(state.cashFlow, loadLedger(state.isDemo)); }
+            catch (error) { console.warn('無法讀取每檔已領股息，庫存表暫以現金流水計算。', error); }
 
             body.innerHTML = state.inventory.map(inv => {
                 const pnl = Number(inv.unrealized_pnl || 0);
                 const roi = Number(inv.roi || 0) * 100;
+                const receivedDividends = Number(dividendsByStock[String(inv.stock_code).trim()] || 0);
                 const pnlClass = pnl >= 0 ? 'text-red-500 font-bold' : 'text-emerald-400 font-bold';
                 const pnlPrefix = pnl >= 0 ? '+' : '';
 
                 // 🚨 智慧自動推算累計投入本金 (容錯與自動計算)：
                 // 讀取 Google Sheets 時若該欄位沒有值，自動由 平均買入成本 * 庫存股數 算出
                 const calculatedCost = Number(inv.total_investment) || (Number(inv.avg_cost || 0) * Number(inv.total_shares || 0));
+                const totalReturnRate = calculatedCost > 0 ? ((pnl + receivedDividends) / calculatedCost) * 100 : 0;
+                const totalReturnClass = totalReturnRate >= 0 ? 'text-red-500 font-bold' : 'text-emerald-400 font-bold';
+                const totalReturnPrefix = totalReturnRate >= 0 ? '+' : '';
 
                 return `
                     <tr class="hover:bg-slate-900/50">
@@ -596,8 +604,10 @@ import { realizedDividends } from '../domain/entitlements';
                         <td class="px-6 py-4 text-right font-mono text-slate-300">$${formatNumber(calculatedCost)}</td>
                         <td class="px-6 py-4 text-right font-mono font-bold text-slate-100">$${formatNumber(inv.current_price, 2)}</td>
                         <td class="px-6 py-4 text-right font-mono font-bold text-slate-100">$${formatNumber(inv.market_value)}</td>
+                        <td class="px-6 py-4 text-right font-mono text-amber-300">$${formatNumber(receivedDividends, 2)}</td>
                         <td class="px-6 py-4 text-right font-mono ${pnlClass}">${pnlPrefix}$${formatNumber(pnl)}</td>
                         <td class="px-6 py-4 text-right font-mono ${pnlClass}">${pnlPrefix}${roi.toFixed(2)}%</td>
+                        <td class="px-6 py-4 text-right font-mono ${totalReturnClass}">${totalReturnPrefix}${totalReturnRate.toFixed(2)}%</td>
                     </tr>
                 `;
             }).join('');

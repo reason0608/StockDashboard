@@ -16,6 +16,11 @@ describe('股息計算與歷史快照', () => {
     expect(estimateDividend(2000, null)).toBeNull();
   });
   it.each([-1, 1.5, Infinity, NaN])('拒絕無效股數 %s', shares => expect(() => estimateDividend(shares, 1)).toThrow());
+  it('依發放日由新到舊排列', () => {
+    const newer = { ...event, id: '0050:2026-08-21', exDate: '2026-08-21', paymentDate: '2026-09-10' };
+    const events = relevantEvents({ ...feed, events: [event, newer] }, [], { version: 1, confirmations: { [event.id]: ledger.confirmations[event.id], [newer.id]: { event: newer, shares: 2000, received: true, confirmedAt: '2026-09-10' } } });
+    expect(events.map(item => item.id)).toEqual([newer.id, event.id]);
+  });
   it('股數確認不受現在持股變化或全部賣出影響', () => {
     const events = relevantEvents(feed, [], ledger);
     expect(events).toHaveLength(1);

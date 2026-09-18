@@ -70,10 +70,16 @@ export function matchingFlows(event: Dividend, flows: CashFlow[]) {
   return flows.filter(f => isDividendFlow(f) && String(f.stock_code).trim() === event.stockCode && tradingDate(f.date) === event.paymentDate);
 }
 
-/** 合併本機已入帳淨額與既有流水；明確連結或唯一同股票同發放日流水只計一次。 */
-export function realizedDividends(flows: CashFlow[], ledger: Ledger): number {
+/** 合併自動入帳淨額與既有流水；明確連結或唯一同股票同發放日流水只計一次。 */
+function calculateRealizedDividends(flows: CashFlow[], ledger: Ledger) {
   const excluded = new Set<string>();
+  const byStock: Record<string, number> = {};
   let total = 0;
+  const add = (stockCode: string | undefined, amount: number) => {
+    total += amount;
+    const code = String(stockCode ?? '').trim();
+    if (code) byStock[code] = (byStock[code] || 0) + amount;
+  };
   for (const c of Object.values(ledger.confirmations)) {
     if (!isDividendReceived(c.event)) continue;
     const net = netDividend(estimateDividend(c.shares, c.event.cashPerShare));
@@ -81,17 +87,24 @@ export function realizedDividends(flows: CashFlow[], ledger: Ledger): number {
     if (c.cashFlowId) excluded.add(c.cashFlowId);
     else {
       const candidates = matchingFlows(c.event, flows);
-      // 同日僅一筆時自動去重；多筆需使用者明確指定，不猜測哪一筆。
       if (candidates.length === 1) excluded.add(String(candidates[0].id));
       else if (candidates.length > 1) continue;
     }
-    total += net;
+    add(c.event.stockCode, net);
   }
   for (const flow of flows) {
     if (isDividendFlow(flow) && !excluded.has(String(flow.id))) {
       const value = Number(flow.amount);
-      if (Number.isFinite(value)) total += value;
+      if (Number.isFinite(value)) add(flow.stock_code, value);
     }
   }
-  return Math.round(total * 100) / 100;
+  return { total: Math.round(total * 100) / 100, byStock: Object.fromEntries(Object.entries(byStock).map(([code, amount]) => [code, Math.round(amount * 100) / 100])) };
+}
+
+export function realizedDividends(flows: CashFlow[], ledger: Ledger): number {
+  return calculateRealizedDividends(flows, ledger).total;
+}
+
+export function realizedDividendsByStock(flows: CashFlow[], ledger: Ledger): Record<string, number> {
+  return calculateRealizedDividends(flows, ledger).byStock;
 }
