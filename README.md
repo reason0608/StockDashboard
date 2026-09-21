@@ -37,6 +37,33 @@ TypeScript 使用 5.9，避免 Vue 型別檢查工具尚未相容 TypeScript 7 �
 - 每筆配息自動扣除固定 NT$10 匯費。發放日到達後自動視為已入帳，並以「稅前總額－NT$10」計入總覽累計已落袋股息；同股票同發放日的唯一股息流水會自動去重。
 - 每次載入或重新整理頁面都會自動讀取最新股息公告，紀錄依發放日由新到舊排列。
 - 配息股數直接由每日交易紀錄推算；自動入帳快照只存於當前瀏覽器。原有帳務仍照現有 Sheets 方式同步。
+- 持股頁顯示行情資料狀態、網頁同步時間、報價日期範圍、無效價格及可能過期的股票。若 `stock_inventory` 提供 `price_date`（`yyyy-MM-dd`）欄位，可檢查報價新鮮度；未提供時會提示但不影響既有功能。
+- 總覽顯示近 12 個月平均每月被動收入、共同目標與達成率；目標由設定頁保存至 `investment_settings`，夫妻裝置共用。
+- 總覽的雙軸歷史曲線讀取 `portfolio_daily_snapshots`，同時呈現總資產與近 12 月平均月股息。
+
+### 庫存報價日期
+
+`stock_inventory` 可新增選填欄位 `price_date`。現有 Apps Script 的 `getSheetData()` 會自動回傳所有標題欄位，因此只新增此欄不需修改或重新部署 Apps Script；仍需重新發布 GitHub Pages 才能使用新版狀態面板。
+
+若以 GOOGLEFINANCE 取得最近收盤日期，可在試算表依實際股票代號欄位調整下列公式：
+
+```
+=IFERROR(LET(data,GOOGLEFINANCE("TPE:"&A2,"close",TODAY()-10,TODAY()),INDEX(data,ROWS(data),1)),"")
+```
+
+GOOGLEFINANCE 可能延遲或暫時缺值；狀態面板只用來揭露資料品質，不將同步成功等同即時報價。
+
+### Apps Script 與每日資產快照
+
+完整新版程式位於 `public/google-apps-script.txt`，也可在網站設定頁按「點此複製」。更新步驟：
+
+1. 備份目前 Apps Script，將新版完整程式貼入綁定試算表的專案。
+2. 在 Apps Script 編輯器手動執行 `setupStockDashboard()` 一次並授權。
+3. 此函式會初始化 `investment_settings`、檢查 `portfolio_daily_snapshots` 標題，並建立每日約 18:30 的快照觸發器。
+4. 建立新的 Web App 部署版本；若產生新的 `/exec` URL，回到 Dashboard 設定頁更新網址。
+5. 重新發布 GitHub Pages。
+
+快照以 `snapshot_date` 為唯一日期；同日重跑會更新原列。目標金額可在「系統設定」的「共同每月被動收入目標」修改，雲端模式會存入 `investment_settings`。
 
 ## 股息資料更新
 

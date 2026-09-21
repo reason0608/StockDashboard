@@ -1,9 +1,10 @@
 import * as lucide from '../shared/icons.js';
-import { renderContributionChart, renderAssetAllocationChart } from './charts.js';
+import { renderContributionChart, renderAssetAllocationChart, renderPortfolioHistoryChart } from './charts.js';
 import { escapeHtml, formatNumber } from '../shared/format.js';
 import { toggleTab } from '../router';
 import { loadLedger } from '../services/dividends';
-import { realizedDividends, realizedDividendsByStock } from '../domain/entitlements';
+import { realizedDividends, realizedDividendsByStock, realizedDividendsSince } from '../domain/entitlements';
+import { analyzeQuoteQuality } from '../domain/quoteQuality';
 
         // =========================================================================
         // ⚙️ 統一雲端連線設定：在此處貼上您的 Google Apps Script Web App URL。
@@ -35,9 +36,12 @@ import { realizedDividends, realizedDividendsByStock } from '../domain/entitleme
             cashFlow: [],
             transactions: [],
             inventory: [],
+            portfolioSnapshots: [],
+            investmentSettings: {},
             apiUrl: "",
             isDemo: true,
-            lastError: ""
+            lastError: "",
+            lastSyncAt: null
         };
 
 
@@ -134,6 +138,7 @@ import { realizedDividends, realizedDividendsByStock } from '../domain/entitleme
         // --- 2. 系統啟動與數據整合載入 ---
         export async function initializeDashboard() {
             bindSettingsValidation();
+            loadAppsScriptPreview();
             window.addEventListener('dividend-ledger-updated', () => { renderDashboard(); renderInventoryTable(); });
             // 優先讀取 LocalStorage 自訂覆蓋，若無則採用全域預設之 DEFAULT_API_URL
             state.apiUrl = localStorage.getItem("sheet_api_url") || DEFAULT_API_URL;
@@ -185,6 +190,8 @@ import { realizedDividends, realizedDividendsByStock } from '../domain/entitleme
                 if (state.isDemo || !state.apiUrl) {
                     state.cashFlow = JSON.parse(localStorage.getItem('demo_cash_flow')) || DEFAULT_CASH_FLOW;
                     state.transactions = JSON.parse(localStorage.getItem('demo_transactions')) || DEFAULT_TRANSACTIONS;
+                    state.portfolioSnapshots = [];
+                    state.investmentSettings = { monthly_passive_income_target: Number(localStorage.getItem('demo_monthly_passive_income_target') || 0) };
                     calculateInventoryFromTransactions();
                     document.getElementById('connection-error-banner').classList.add('hidden');
                 } else {
@@ -206,7 +213,10 @@ import { realizedDividends, realizedDividendsByStock } from '../domain/entitleme
                     state.cashFlow = (data.cashFlow || []).filter(item => item.id);
                     state.transactions = (data.transactions || []).filter(item => item.id);
                     state.inventory = (data.inventory || []).filter(item => item.stock_code);
+                    state.portfolioSnapshots = Array.isArray(data.portfolioSnapshots) ? data.portfolioSnapshots : [];
+                    state.investmentSettings = data.investmentSettings && typeof data.investmentSettings === 'object' ? data.investmentSettings : {};
                     state.lastError = "";
+                    state.lastSyncAt = new Date().toISOString();
 
                     const badge = document.getElementById('connection-badge');
                     badge.className = "cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-2.5 sm:py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 transition-all duration-200 active:scale-95";
@@ -228,8 +238,11 @@ import { realizedDividends, realizedDividendsByStock } from '../domain/entitleme
                 state.lastError = error.toString();
                 
                 state.isDemo = true;
+                state.lastSyncAt = null;
                 state.cashFlow = JSON.parse(localStorage.getItem('demo_cash_flow')) || DEFAULT_CASH_FLOW;
                 state.transactions = JSON.parse(localStorage.getItem('demo_transactions')) || DEFAULT_TRANSACTIONS;
+                state.portfolioSnapshots = [];
+                state.investmentSettings = { monthly_passive_income_target: Number(localStorage.getItem('demo_monthly_passive_income_target') || 0) };
                 calculateInventoryFromTransactions();
                 
                 renderDashboard();
@@ -409,6 +422,8 @@ import { realizedDividends, realizedDividendsByStock } from '../domain/entitleme
                 totalDividends = state.cashFlow.filter(flow => /股息|配息/.test(String(flow.type || ''))).reduce((sum, flow) => sum + (Number(flow.amount) || 0), 0);
             }
             document.getElementById('card-total-dividends').textContent = `$${formatNumber(totalDividends, 2)}`;
+            renderPassiveIncome();
+            renderPortfolioHistoryChart(state.portfolioSnapshots);
 
             const pnlElement = document.getElementById('card-unrealized-pnl');
             const roiElement = document.getElementById('card-roi');
@@ -572,6 +587,7 @@ import { realizedDividends, realizedDividendsByStock } from '../domain/entitleme
         // 渲染持股庫存 Table (買入成本與目前市價強制呈現2位小數點)
         function renderInventoryTable() {
             const body = document.getElementById('inventory-table-body');
+            renderQuoteQuality();
             
             if (state.inventory.length === 0) {
                 body.innerHTML = `<tr><td colspan="10" class="px-6 py-10 text-center text-slate-500">目前庫存空空如也，快去買進第一檔股票吧！</td></tr>`;
@@ -639,6 +655,60 @@ import { realizedDividends, realizedDividendsByStock } from '../domain/entitleme
                     </tr>
                 `;
             }).join('');
+        }
+
+        /** 依最近十二個月已入帳股息計算共同月收入目標與達成率。 */
+        function renderPassiveIncome() {
+            const today = formatDateTaipei(new Date());
+            const since = new Date(`${today}T12:00:00+08:00`);
+            since.setFullYear(since.getFullYear() - 1);
+            const sinceDate = formatDateTaipei(since);
+            let trailing = 0;
+            try { trailing = realizedDividendsSince(state.cashFlow, loadLedger(state.isDemo), sinceDate); }
+            catch (error) { console.warn('近十二月股息計算失敗。', error); }
+            const monthly = trailing / 12;
+            const target = Number(state.investmentSettings.monthly_passive_income_target || 0);
+            const progress = target > 0 ? monthly / target * 100 : 0;
+            document.getElementById('card-monthly-passive-income').textContent = `$${formatNumber(monthly, 2)}`;
+            document.getElementById('passive-income-target').textContent = target > 0 ? `$${formatNumber(target)}` : '尚未設定';
+            document.getElementById('passive-income-progress-text').textContent = target > 0 ? `${progress.toFixed(1)}%` : '尚未設定';
+            document.getElementById('passive-income-progress-bar').style.width = `${Math.min(Math.max(progress, 0), 100)}%`;
+            const input = document.getElementById('settings-passive-income-target');
+            if (input && document.activeElement !== input) input.value = target > 0 ? String(target) : '';
+        }
+
+        /** 顯示試算表同步時間、報價日期與異常代號，避免將舊報價誤認為即時行情。 */
+        function renderQuoteQuality() {
+            const panel = document.getElementById('quote-quality-panel');
+            if (!panel) return;
+            const quality = analyzeQuoteQuality(state.inventory, new Date(), state.isDemo);
+            const synced = state.lastSyncAt
+                ? new Date(state.lastSyncAt).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false })
+                : '—';
+            const dateRange = quality.oldestQuoteDate
+                ? (quality.oldestQuoteDate === quality.newestQuoteDate ? quality.oldestQuoteDate : `${quality.oldestQuoteDate}～${quality.newestQuoteDate}`)
+                : '未提供';
+            const styles = {
+                ok: ['行情資料正常', 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'],
+                warning: ['行情資料需留意', 'bg-amber-500/10 text-amber-300 border-amber-500/30'],
+                error: ['行情資料異常', 'bg-rose-500/10 text-rose-300 border-rose-500/30'],
+                demo: ['Demo 固定報價', 'bg-slate-700/50 text-slate-300 border-slate-600'],
+            };
+            const [label, badgeClass] = styles[quality.level];
+            const issues = [];
+            if (quality.invalidCodes.length) issues.push(`無有效市價：${quality.invalidCodes.join('、')}`);
+            if (quality.staleCodes.length) issues.push(`報價可能過期：${quality.staleCodes.join('、')}`);
+            if (quality.missingDateCodes.length) issues.push(`缺少 price_date：${quality.missingDateCodes.join('、')}`);
+            panel.innerHTML = `
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <div class="flex items-center gap-2"><h3 class="font-semibold text-slate-200">行情資料狀態</h3><span class="px-2 py-0.5 rounded-full border text-xs ${badgeClass}">${label}</span></div>
+                        <p class="text-xs text-slate-400 mt-1">GOOGLEFINANCE 可能為延遲行情；同步成功不代表所有報價都是當日資料。</p>
+                    </div>
+                    <div class="text-xs text-slate-400 font-mono text-right"><p>網頁同步：${escapeHtml(synced)}</p><p>報價日期：${escapeHtml(dateRange)}</p></div>
+                </div>
+                ${issues.length ? `<div class="mt-3 text-xs text-amber-300 space-y-1">${issues.map(issue => `<p>${escapeHtml(issue)}</p>`).join('')}</div>` : ''}
+            `;
         }
 
         // --- 6. 介面 Tabs 操作與彈窗機制 ---
@@ -811,10 +881,15 @@ import { realizedDividends, realizedDividendsByStock } from '../domain/entitleme
         }
 
         // --- 8. 設定管理 ---
-        function saveApiSettings() {
+        async function saveApiSettings() {
             const url = document.getElementById('settings-api-url').value.trim();
             const husbandInput = document.getElementById('settings-husband-name').value.trim();
             const wifeInput = document.getElementById('settings-wife-name').value.trim();
+            const target = Number(document.getElementById('settings-passive-income-target').value || 0);
+            if (!Number.isFinite(target) || target < 0 || target > 1000000000) {
+                showToast("被動收入目標必須是 0 到 10 億之間的數字。", "alert-triangle", "text-rose-400");
+                return;
+            }
 
             if (url) {
                 const validation = validateGasUrl(url);
@@ -828,6 +903,21 @@ import { realizedDividends, realizedDividendsByStock } from '../domain/entitleme
             // 儲存姓名客製化設定
             localStorage.setItem("husband_name", husbandInput);
             localStorage.setItem("wife_name", wifeInput);
+            if (state.isDemo || !(url || state.apiUrl)) {
+                localStorage.setItem('demo_monthly_passive_income_target', String(target));
+            } else {
+                try {
+                    const response = await fetch(url || state.apiUrl, {
+                        method: 'POST',
+                        body: JSON.stringify({ action: 'saveSettings', settings: { monthly_passive_income_target: target } })
+                    });
+                    const result = await response.json();
+                    if (result.status !== 'success') throw new Error(result.message || '設定儲存失敗');
+                } catch (error) {
+                    showToast("被動收入目標無法寫入 investment_settings，請先更新並部署 Apps Script。", "alert-circle", "text-red-400");
+                    return;
+                }
+            }
 
             showToast("所有設定已儲存！即將自動刷新...", "check-circle", "text-emerald-400");
             setTimeout(() => {
@@ -842,13 +932,23 @@ import { realizedDividends, realizedDividendsByStock } from '../domain/entitleme
             localStorage.removeItem("demo_transactions");
             localStorage.removeItem("husband_name");
             localStorage.removeItem("wife_name");
+            localStorage.removeItem("demo_monthly_passive_income_target");
             showToast("已重置為 DEMO 測試模式，正在重刷...", "check-circle", "text-emerald-400");
             setTimeout(() => {
                 window.location.reload();
             }, 1500);
         }
 
-        function copyAppsScriptCode() {
+        async function loadAppsScriptPreview() {
+            try {
+                const response = await fetch(`${import.meta.env.BASE_URL}google-apps-script.txt`, { cache: 'no-cache' });
+                if (!response.ok) throw new Error('Apps Script 範本讀取失敗');
+                document.getElementById('apps-script-code-block').textContent = await response.text();
+            } catch (error) { console.warn(error); }
+        }
+
+        async function copyAppsScriptCode() {
+            await loadAppsScriptPreview();
             const code = document.getElementById('apps-script-code-block').innerText;
             const textarea = document.createElement('textarea');
             textarea.value = code;

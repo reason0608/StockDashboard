@@ -1,0 +1,200 @@
+/*
+ * StockDashboard Google Apps Script 完整版
+ * 1. 整份貼入試算表綁定的 Apps Script。
+ * 2. 執行 setupStockDashboard() 一次並授權，會初始化欄位及每日 18:30 左右的快照排程。
+ * 3. 建立新版本並重新部署 Web App，沿用原本「執行身分：自己」與存取設定。
+ */
+var ALLOWED_APPEND_SHEETS = ['users_cash_flow', 'daily_transactions'];
+var SNAPSHOT_HEADERS = [
+  'snapshot_date', 'captured_at', 'cash_balance', 'stock_market_value', 'total_assets',
+  'total_cost_basis', 'unrealized_pnl', 'total_contributed', 'husband_contributed',
+  'wife_contributed', 'joint_contributed', 'received_dividends_cumulative',
+  'dividends_received_today', 'trailing_12m_dividends', 'holdings_count',
+  'oldest_price_date', 'newest_price_date', 'quote_status', 'invalid_quote_codes'
+];
+
+/** 回傳 Dashboard 所需的帳務、快照與共同設定。 */
+function doGet() {
+  var ss = getSpreadsheet_();
+  var result = {
+    cashFlow: getSheetData_(ss.getSheetByName('users_cash_flow')),
+    transactions: getSheetData_(ss.getSheetByName('daily_transactions')),
+    inventory: getSheetData_(ss.getSheetByName('stock_inventory')),
+    portfolioSnapshots: getSheetData_(ss.getSheetByName('portfolio_daily_snapshots')),
+    investmentSettings: getSettings_(ss)
+  };
+  return json_(result);
+}
+
+/** 僅允許白名單帳務新增，或更新允許的共同設定。 */
+function doPost(e) {
+  try {
+    var params = JSON.parse(e.postData.contents);
+    var ss = getSpreadsheet_();
+    if (params.action === 'saveSettings') {
+      saveSettings_(ss, params.settings || {});
+      return json_({ status: 'success' });
+    }
+    if (ALLOWED_APPEND_SHEETS.indexOf(params.targetSheet) === -1) {
+      return json_({ status: 'error', message: '不允許寫入此工作表' });
+    }
+    var sheet = ss.getSheetByName(params.targetSheet);
+    if (!sheet || !Array.isArray(params.rowData)) return json_({ status: 'error', message: '工作表或資料格式不正確' });
+    sheet.appendRow(params.rowData);
+    return json_({ status: 'success' });
+  } catch (error) {
+    return json_({ status: 'error', message: String(error.message || error) });
+  }
+}
+
+/** 第一次設定時執行：保存試算表 ID、初始化工作表並建立每日觸發器。 */
+function setupStockDashboard() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  PropertiesService.getScriptProperties().setProperty('SPREADSHEET_ID', ss.getId());
+  ensureSheet_(ss, 'investment_settings', ['setting_key', 'setting_value']);
+  ensureSheet_(ss, 'portfolio_daily_snapshots', SNAPSHOT_HEADERS);
+  ScriptApp.getProjectTriggers().forEach(function(trigger) {
+    if (trigger.getHandlerFunction() === 'capturePortfolioDailySnapshot') ScriptApp.deleteTrigger(trigger);
+  });
+  ScriptApp.newTrigger('capturePortfolioDailySnapshot').timeBased().everyDays(1).atHour(18).nearMinute(30).create();
+  capturePortfolioDailySnapshot();
+}
+
+/** 每日保存一筆值快照；同日期重跑時更新原列，不重複新增。 */
+function capturePortfolioDailySnapshot() {
+  var ss = getSpreadsheet_();
+  var cashFlows = getSheetData_(ss.getSheetByName('users_cash_flow'));
+  var inventory = getSheetData_(ss.getSheetByName('stock_inventory'));
+  var contributorNames = [];
+  cashFlows.forEach(function(flow) {
+    if (String(flow.type || '').indexOf('存入') >= 0 && flow.contributor && flow.contributor !== '共同' && contributorNames.indexOf(String(flow.contributor)) === -1) contributorNames.push(String(flow.contributor));
+  });
+  var names = { husband: contributorNames[0] || '老公', wife: contributorNames[1] || '老婆' };
+  var now = new Date();
+  var today = date_(now);
+  var yearAgo = new Date(now.getTime());
+  yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+  var since = date_(yearAgo);
+  var cash = 0, totalContributed = 0, husband = 0, wife = 0, joint = 0;
+  var dividends = 0, dividendsToday = 0, trailing = 0;
+  cashFlows.forEach(function(flow) {
+    var amount = number_(flow.amount);
+    var type = String(flow.type || '');
+    var flowDate = String(flow.date || '').slice(0, 10);
+    if (type.indexOf('存入') >= 0) {
+      cash += amount; totalContributed += amount;
+      if (flow.contributor === names.husband) husband += amount;
+      else if (flow.contributor === names.wife) wife += amount;
+      else joint += amount;
+    } else if (/股息|配息/.test(type)) {
+      cash += amount; dividends += amount;
+      if (flowDate === today) dividendsToday += amount;
+      if (flowDate >= since && flowDate <= today) trailing += amount;
+    } else if (/支出|交割/.test(type)) cash -= Math.abs(amount);
+    else cash += amount;
+  });
+  if (cashFlows.length) {
+    var latest = cashFlows.slice().sort(function(a, b) { return String(a.date).localeCompare(String(b.date)); }).pop();
+    if (latest.account_balance !== '' && latest.account_balance != null && isFinite(Number(latest.account_balance))) cash = Number(latest.account_balance);
+  }
+  var market = 0, cost = 0, pnl = 0, dates = [], invalid = [];
+  inventory.forEach(function(item) {
+    var price = Number(item.current_price);
+    if (!isFinite(price) || price <= 0) invalid.push(String(item.stock_code || '未知代號'));
+    market += number_(item.market_value);
+    var itemCost = number_(item.total_investment) || number_(item.avg_cost) * number_(item.total_shares);
+    cost += itemCost;
+    pnl += number_(item.unrealized_pnl);
+    var priceDate = String(item.price_date || item.quote_date || '').slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(priceDate)) dates.push(priceDate);
+  });
+  dates.sort();
+  var row = [
+    today, Utilities.formatDate(now, 'Asia/Taipei', 'yyyy-MM-dd HH:mm:ss'), cash, market, cash + market,
+    cost, pnl, totalContributed, husband, wife, joint, dividends, dividendsToday, trailing,
+    inventory.length, dates[0] || '', dates[dates.length - 1] || '',
+    invalid.length ? 'error' : (dates.length < inventory.length ? 'warning' : 'ok'), invalid.join(',')
+  ];
+  upsertByDate_(ensureSheet_(ss, 'portfolio_daily_snapshots', SNAPSHOT_HEADERS), today, row);
+}
+
+/** 讀取標題列並轉為物件陣列，日期統一輸出為台北日期。 */
+function getSheetData_(sheet) {
+  if (!sheet || sheet.getLastRow() < 2 || sheet.getLastColumn() < 1) return [];
+  var data = sheet.getDataRange().getValues();
+  var keys = data[0].map(String);
+  return data.slice(1).filter(function(row) { return row.some(function(value) { return value !== ''; }); }).map(function(row) {
+    var obj = {};
+    keys.forEach(function(key, index) {
+      var value = row[index];
+      if (value instanceof Date) value = date_(value);
+      obj[key] = value;
+    });
+    return obj;
+  });
+}
+
+function getSettings_(ss) {
+  var result = {};
+  getSheetData_(ss.getSheetByName('investment_settings')).forEach(function(row) {
+    result[String(row.setting_key)] = row.setting_value;
+  });
+  return result;
+}
+
+function saveSettings_(ss, settings) {
+  var allowed = ['monthly_passive_income_target'];
+  var sheet = ensureSheet_(ss, 'investment_settings', ['setting_key', 'setting_value']);
+  allowed.forEach(function(key) {
+    if (!(key in settings)) return;
+    var value = Number(settings[key]);
+    if (!isFinite(value) || value < 0 || value > 1000000000) throw new Error('目標金額超出允許範圍');
+    upsertSetting_(sheet, key, value);
+  });
+}
+
+function upsertSetting_(sheet, key, value) {
+  var values = sheet.getDataRange().getValues();
+  for (var i = 1; i < values.length; i++) {
+    if (String(values[i][0]) === key) { sheet.getRange(i + 1, 2).setValue(value); return; }
+  }
+  sheet.appendRow([key, value]);
+}
+
+function upsertByDate_(sheet, date, row) {
+  var values = sheet.getDataRange().getValues();
+  for (var i = 1; i < values.length; i++) {
+    if (date_(values[i][0]) === date) { sheet.getRange(i + 1, 1, 1, row.length).setValues([row]); return; }
+  }
+  sheet.appendRow(row);
+}
+
+function ensureSheet_(ss, name, headers) {
+  var sheet = ss.getSheetByName(name) || ss.insertSheet(name);
+  if (sheet.getLastRow() === 0) sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  else {
+    var actual = sheet.getRange(1, 1, 1, headers.length).getValues()[0].map(String);
+    if (actual.join('|') !== headers.join('|')) throw new Error(name + ' 標題列不符合新版格式，請依範本調整後再執行');
+  }
+  return sheet;
+}
+
+function getSpreadsheet_() {
+  var id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
+  return id ? SpreadsheetApp.openById(id) : SpreadsheetApp.getActiveSpreadsheet();
+}
+
+function number_(value) {
+  var number = Number(value);
+  return isFinite(number) ? number : 0;
+}
+
+function date_(value) {
+  if (!value) return '';
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.slice(0, 10))) return value.slice(0, 10);
+  return Utilities.formatDate(new Date(value), 'Asia/Taipei', 'yyyy-MM-dd');
+}
+
+function json_(value) {
+  return ContentService.createTextOutput(JSON.stringify(value)).setMimeType(ContentService.MimeType.JSON);
+}

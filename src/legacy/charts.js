@@ -2,6 +2,7 @@ import Chart from 'chart.js/auto';
 import { escapeHtml, formatNumber } from '../shared/format.js';
 let contributionChartInstance = null;
 let assetAllocationChartInstance = null;
+let portfolioHistoryChartInstance = null;
         // --- 5. 出資與資產比重圖表渲染 (Chart.js) (調整為完全支援動態出資人代名) ---
         export function renderContributionChart(husband, wife, joint, husbandName, wifeName) {
             const ctx = document.getElementById('contributionChart').getContext('2d');
@@ -109,4 +110,37 @@ let assetAllocationChartInstance = null;
                 }
             });
         }
+
+/** 以雙 Y 軸呈現資產規模與近十二月平均月股息，避免金額尺度差異壓平股息曲線。 */
+export function renderPortfolioHistoryChart(snapshots) {
+    const canvas = document.getElementById('portfolioHistoryChart');
+    const empty = document.getElementById('portfolio-history-empty');
+    if (!canvas || !empty) return;
+    const rows = [...snapshots]
+        .filter(row => /^\d{4}-\d{2}-\d{2}$/.test(String(row.snapshot_date || '')))
+        .sort((a, b) => String(a.snapshot_date).localeCompare(String(b.snapshot_date)));
+    empty.classList.toggle('hidden', rows.length > 0);
+    canvas.classList.toggle('hidden', rows.length === 0);
+    if (portfolioHistoryChartInstance) portfolioHistoryChartInstance.destroy();
+    if (!rows.length) return;
+    portfolioHistoryChartInstance = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: rows.map(row => row.snapshot_date),
+            datasets: [
+                { label: '總資產', data: rows.map(row => Number(row.total_assets) || 0), yAxisID: 'assets', borderColor: '#818cf8', backgroundColor: '#818cf833', fill: true, tension: 0.25, pointRadius: 1 },
+                { label: '近12月平均月股息', data: rows.map(row => (Number(row.trailing_12m_dividends) || 0) / 12), yAxisID: 'income', borderColor: '#fbbf24', tension: 0.25, pointRadius: 2 },
+            ],
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+            scales: {
+                assets: { position: 'left', ticks: { color: '#94a3b8', callback: value => '$' + formatNumber(value) }, grid: { color: '#1e293b' } },
+                income: { position: 'right', ticks: { color: '#fbbf24', callback: value => '$' + formatNumber(value) }, grid: { drawOnChartArea: false } },
+                x: { ticks: { color: '#94a3b8', maxTicksLimit: 8 }, grid: { display: false } },
+            },
+            plugins: { legend: { labels: { color: '#cbd5e1' } } },
+        },
+    });
+}
 

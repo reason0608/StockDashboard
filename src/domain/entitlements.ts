@@ -71,7 +71,7 @@ export function matchingFlows(event: Dividend, flows: CashFlow[]) {
 }
 
 /** 合併自動入帳淨額與既有流水；明確連結或唯一同股票同發放日流水只計一次。 */
-function calculateRealizedDividends(flows: CashFlow[], ledger: Ledger) {
+function calculateRealizedDividends(flows: CashFlow[], ledger: Ledger, sinceDate?: string) {
   const excluded = new Set<string>();
   const byStock: Record<string, number> = {};
   let total = 0;
@@ -82,6 +82,7 @@ function calculateRealizedDividends(flows: CashFlow[], ledger: Ledger) {
   };
   for (const c of Object.values(ledger.confirmations)) {
     if (!isDividendReceived(c.event)) continue;
+    if (sinceDate && (!c.event.paymentDate || c.event.paymentDate < sinceDate)) continue;
     const net = netDividend(estimateDividend(c.shares, c.event.cashPerShare));
     if (net === null) continue;
     if (c.cashFlowId) excluded.add(c.cashFlowId);
@@ -94,6 +95,7 @@ function calculateRealizedDividends(flows: CashFlow[], ledger: Ledger) {
   }
   for (const flow of flows) {
     if (isDividendFlow(flow) && !excluded.has(String(flow.id))) {
+      if (sinceDate && (tradingDate(flow.date) || '') < sinceDate) continue;
       const value = Number(flow.amount);
       if (Number.isFinite(value)) add(flow.stock_code, value);
     }
@@ -107,4 +109,10 @@ export function realizedDividends(flows: CashFlow[], ledger: Ledger): number {
 
 export function realizedDividendsByStock(flows: CashFlow[], ledger: Ledger): Record<string, number> {
   return calculateRealizedDividends(flows, ledger).byStock;
+}
+
+/** 計算指定日期（含）之後已入帳股息，供近十二月被動收入指標使用。 */
+export function realizedDividendsSince(flows: CashFlow[], ledger: Ledger, sinceDate: string): number {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(sinceDate)) throw new Error('股息統計起日格式不正確');
+  return calculateRealizedDividends(flows, ledger, sinceDate).total;
 }

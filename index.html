@@ -125,6 +125,20 @@
                 </div>
             </div>
 
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl shadow-lg">
+                    <p class="text-sm text-slate-400">近 12 個月平均每月被動收入</p>
+                    <p id="card-monthly-passive-income" class="text-3xl font-extrabold text-amber-300 mt-2">$0</p>
+                    <div class="flex justify-between text-xs text-slate-400 mt-3"><span>共同目標 <strong id="passive-income-target">$0</strong></span><span id="passive-income-progress-text">尚未設定</span></div>
+                    <div class="h-2 bg-slate-800 rounded-full overflow-hidden mt-2"><div id="passive-income-progress-bar" class="h-full bg-gradient-to-r from-amber-500 to-emerald-400 rounded-full transition-all" style="width:0%"></div></div>
+                    <p class="text-xs text-slate-500 mt-3">以最近 12 個月已入帳股息 ÷ 12 計算；目標可在系統設定修改。</p>
+                </div>
+                <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl shadow-lg lg:col-span-2">
+                    <div><h4 class="font-bold text-slate-100">資產與被動收入歷史</h4><p class="text-xs text-slate-400 mt-1">資料來自 portfolio_daily_snapshots；左右軸分別顯示資產與近 12 月平均月股息。</p></div>
+                    <div class="h-72 mt-4"><canvas id="portfolioHistoryChart"></canvas><div id="portfolio-history-empty" class="h-full flex items-center justify-center text-sm text-slate-500">尚無每日快照。完成 Apps Script 設定後將逐日累積。</div></div>
+                </div>
+            </div>
+
             <!-- 圖表分析區 -->
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <!-- 出資比例圓餅圖 -->
@@ -247,6 +261,8 @@
                 <p class="text-xs text-slate-400 font-mono">對應試算表中的 「stock_inventory」 工作表（台股報價自動由 GOOGLEFINANCE 更新）</p>
             </div>
 
+            <div id="quote-quality-panel" class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg" aria-live="polite"></div>
+
             <div class="bg-slate-900 border border-slate-800 rounded-xl shadow-lg overflow-hidden">
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-slate-800 text-sm text-left">
@@ -348,6 +364,12 @@
                             <label class="block text-sm font-medium text-slate-300 mb-1.5">出資人 2 在試算表的名字 (例如: 心心)</label>
                             <input type="text" id="settings-wife-name" placeholder="預設：老婆 (會嘗試自動偵測)" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition">
                         </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-1.5">共同每月被動收入目標（NT$）</label>
+                        <input type="number" id="settings-passive-income-target" min="0" step="100" placeholder="例如：20000" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition">
+                        <p class="text-xs text-slate-500 mt-1">雲端模式會存入 investment_settings；Demo 模式只存於目前瀏覽器。</p>
                     </div>
 
                     <div class="flex gap-3 pt-2">

@@ -19,6 +19,7 @@ test('既有分頁與新增交易表單可操作，重新整理 hash 保留分�
   await expect(page.locator('#tab-content-inventory')).toContainText('已領股息');
   await expect(page.locator('#tab-content-inventory')).toContainText('未實現損益（不含息）');
   await expect(page.locator('#tab-content-inventory')).toContainText('含息報酬率');
+  await expect(page.locator('#quote-quality-panel')).toContainText('Demo 固定報價');
   await expect(page.locator('#inventory-table-body tr').first().locator('td').nth(6)).toHaveText(/^\$1,(500|610)$/);
   await page.reload();
   await expect(page.locator('#tab-content-inventory')).toBeVisible();
@@ -69,9 +70,20 @@ test('Sheets 持股與 Demo 快照分離，外部股票名稱不執行 HTML', as
   const gas = `https://script.google.com/macros/s/${'a'.repeat(60)}/exec`;
   await page.addInitScript(url => localStorage.setItem('sheet_api_url', url), gas);
   await page.route(gas, route => route.fulfill({ json: {
-    cashFlow: [], transactions: [{ id: 'T1', date: '2026-01-01', stock_code: '2330', stock_name: '台積電', action: '買入', shares: 300, price: 100, fee: 0, tax: 0, total_amount: 30000 }], inventory: [{ stock_code: '2330', stock_name: '<img src=x onerror=alert(1)>', total_shares: 300, current_price: 100, market_value: 30000 }],
+    cashFlow: [{ id: 'F1', date: '2026-08-01', contributor: '共同', type: '股息流入', stock_code: '2330', amount: 1200 }],
+    transactions: [{ id: 'T1', date: '2026-01-01', stock_code: '2330', stock_name: '台積電', action: '買入', shares: 300, price: 100, fee: 0, tax: 0, total_amount: 30000 }],
+    inventory: [{ stock_code: '2330', stock_name: '<img src=x onerror=alert(1)>', total_shares: 300, current_price: 100, market_value: 30000 }],
+    investmentSettings: { monthly_passive_income_target: 1000 },
+    portfolioSnapshots: [{ snapshot_date: '2026-09-17', total_assets: 30000, trailing_12m_dividends: 1200 }],
   } }));
   await page.goto('./#/inventory');
+  await expect(page.locator('#quote-quality-panel')).toContainText('行情資料需留意');
+  await expect(page.locator('#quote-quality-panel')).toContainText('缺少 price_date：2330');
+  await expect(page.locator('#card-monthly-passive-income')).toHaveText('$249.17');
+  await expect(page.locator('#passive-income-progress-text')).toHaveText('24.9%');
+  await page.locator('#tab-btn-dashboard').click();
+  await expect(page.locator('#portfolioHistoryChart')).toBeVisible();
+  await page.locator('#tab-btn-inventory').click();
   await expect(page.locator('#inventory-table-body')).toContainText('<img src=x onerror=alert(1)>');
   await expect(page.locator('#inventory-table-body img')).toHaveCount(0);
   await page.locator('#tab-btn-dividends').click();
