@@ -16,6 +16,10 @@ test('既有分頁與新增交易表單可操作，重新整理 hash 保留分�
   await expect(page.locator('#card-total-assets')).not.toHaveText('$0');
   await expect(page.locator('#tab-content-dashboard #card-monthly-passive-income')).toHaveCount(1);
   await expect(page.locator('#tab-content-dashboard #portfolioHistoryChart')).toHaveCount(0);
+  await expect(page.locator('#contributionChart')).toHaveCount(0);
+  await expect(page.locator('#assetAllocationChart')).toHaveCount(0);
+  await expect(page.locator('#contribution-legend')).toContainText('投入');
+  await expect(page.locator('#asset-allocation-list')).toContainText('現金');
   await page.locator('#tab-btn-inventory').click();
   await expect(page.locator('#inventory-table-body')).toContainText('2330');
   await expect(page.locator('#tab-content-inventory')).toContainText('已領股息');

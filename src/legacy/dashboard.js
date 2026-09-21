@@ -1,5 +1,5 @@
 import * as lucide from '../shared/icons.js';
-import { renderContributionChart, renderAssetAllocationChart, renderPortfolioHistoryChart } from './charts.js';
+import { renderContributionSummary, renderAssetAllocationSummary, renderPortfolioHistoryChart } from './charts.js';
 import { escapeHtml, formatNumber } from '../shared/format.js';
 import { toggleTab } from '../router';
 import { loadLedger } from '../services/dividends';
@@ -447,8 +447,8 @@ import { analyzeQuoteQuality } from '../domain/quoteQuality';
                 bgIndicator.innerHTML = `<i data-lucide="trending-down" class="w-16 h-16"></i>`;
             }
 
-            renderContributionChart(husbandContributed, wifeContributed, jointContributed, husbandName, wifeName);
-            renderAssetAllocationChart(cashBalance, state.inventory);
+            renderContributionSummary(husbandContributed, wifeContributed, jointContributed, husbandName, wifeName);
+            renderAssetAllocationSummary(cashBalance, state.inventory);
 
             // 今日交易戰報 (手機端響應式合併與隐藏優化)
             const todayStr = formatDateTaipei(new Date());

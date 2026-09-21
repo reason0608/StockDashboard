@@ -1,11 +1,8 @@
 import Chart from 'chart.js/auto';
 import { escapeHtml, formatNumber } from '../shared/format.js';
-let contributionChartInstance = null;
-let assetAllocationChartInstance = null;
 let portfolioHistoryChartInstance = null;
-        // --- 5. 出資與資產比重圖表渲染 (Chart.js) (調整為完全支援動態出資人代名) ---
-        export function renderContributionChart(husband, wife, joint, husbandName, wifeName) {
-            const ctx = document.getElementById('contributionChart').getContext('2d');
+        // --- 5. 出資與資產比重明細（精簡總覽，不繪製圓餅圖） ---
+        export function renderContributionSummary(husband, wife, joint, husbandName, wifeName) {
             const total = husband + wife + joint;
             
             const husbandPct = total > 0 ? ((husband / total) * 100).toFixed(1) : 0;
@@ -28,30 +25,9 @@ let portfolioHistoryChartInstance = null;
                 </div>
             `;
 
-            if (contributionChartInstance) contributionChartInstance.destroy();
-
-            contributionChartInstance = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: [husbandName, wifeName, '共同存款'],
-                    datasets: [{
-                        data: [husband, wife, joint],
-                        backgroundColor: ['#6366f1', '#ec4899', '#f59e0b'],
-                        borderWidth: 0,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    cutout: '70%'
-                }
-            });
         }
 
-        export function renderAssetAllocationChart(cash, inventoryList) {
-            const ctx = document.getElementById('assetAllocationChart').getContext('2d');
-            
+        export function renderAssetAllocationSummary(cash, inventoryList) {
             let stockTotal = 0;
             const labels = ['現金'];
             const data = [cash];
@@ -91,24 +67,6 @@ let portfolioHistoryChartInstance = null;
             });
             listContainer.innerHTML = listHtml;
 
-            if (assetAllocationChartInstance) assetAllocationChartInstance.destroy();
-
-            assetAllocationChartInstance = new Chart(ctx, {
-                type: 'pie',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        data: data,
-                        backgroundColor: colors,
-                        borderWidth: 0,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } }
-                }
-            });
         }
 
 /** 以雙 Y 軸呈現資產規模與近十二月平均月股息，避免金額尺度差異壓平股息曲線。 */

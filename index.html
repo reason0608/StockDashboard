@@ -136,10 +136,9 @@
                 </div>
             </div>
 
-            <!-- 圖表分析區 -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <!-- 出資比例圓餅圖 -->
-                <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl shadow-lg flex flex-col justify-between">
+            <!-- 出資與資產配置明細 -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl shadow-lg">
                     <div>
                         <h4 class="text-md font-bold text-slate-100 flex items-center gap-2">
                             <i data-lucide="pie-chart" class="w-4 h-4 text-indigo-400"></i>
@@ -147,18 +146,12 @@
                         </h4>
                         <p class="text-xs text-slate-400 mt-1">依據歷史上「存入」共同帳戶 the 流水記錄加總</p>
                     </div>
-                    <div class="my-6 flex justify-center">
-                        <div class="w-48 h-48 relative">
-                            <canvas id="contributionChart"></canvas>
-                        </div>
-                    </div>
-                    <div class="space-y-2" id="contribution-legend">
+                    <div class="space-y-2 mt-4" id="contribution-legend">
                         <!-- 動態填充 -->
                     </div>
                 </div>
 
-                <!-- 資產分布與庫存市值佔比 -->
-                <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl shadow-lg lg:col-span-2 flex flex-col justify-between">
+                <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl shadow-lg">
                     <div>
                         <h4 class="text-md font-bold text-slate-100 flex items-center gap-2">
                             <i data-lucide="donut-chart" class="w-4 h-4 text-emerald-400"></i>
@@ -166,15 +159,8 @@
                         </h4>
                         <p class="text-xs text-slate-400 mt-1">目前手上的股票市值及現金佔比</p>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 my-4 items-center">
-                        <div class="flex justify-center">
-                            <div class="w-44 h-44">
-                                <canvas id="assetAllocationChart"></canvas>
-                            </div>
-                        </div>
-                        <div class="space-y-3" id="asset-allocation-list">
-                            <!-- 動態填充持股比重 -->
-                        </div>
+                    <div class="space-y-3 mt-4" id="asset-allocation-list">
+                        <!-- 動態填充持股比重 -->
                     </div>
                 </div>
             </div>
