@@ -77,7 +77,10 @@ test('Sheets 持股與 Demo 快照分離，外部股票名稱不執行 HTML', as
   await page.addInitScript(url => localStorage.setItem('sheet_api_url', url), gas);
   await page.route(gas, route => route.fulfill({ json: {
     cashFlow: [{ id: 'F1', date: '2026-08-01', contributor: '共同', type: '股息流入', stock_code: '2330', amount: 1200 }],
-    transactions: [{ id: 'T1', date: '2026-01-01', stock_code: '2330', stock_name: '台積電', action: '買入', shares: 300, price: 100, fee: 0, tax: 0, total_amount: 30000 }],
+    transactions: [
+      { id: 'T1', date: '2026-01-01', stock_code: '2330', stock_name: '台積電', action: '買入', shares: 300, price: 100, fee: 0, tax: 0, total_amount: 30000 },
+      { id: 'T2', date: '2026-09-18', stock_code: '0050', stock_name: '元大台灣50', action: '買入', shares: 10, price: 65, fee: 1, tax: 0, total_amount: 651 },
+    ],
     inventory: [{ stock_code: '2330', stock_name: '<img src=x onerror=alert(1)>', total_shares: 300, current_price: 100, market_value: 30000 }],
     investmentSettings: { monthly_passive_income_target: 1000 },
     portfolioSnapshots: [{ snapshot_date: '2026-09-17', total_assets: 30000, trailing_12m_dividends: 1200 }],
@@ -87,6 +90,10 @@ test('Sheets 持股與 Demo 快照分離，外部股票名稱不執行 HTML', as
   await expect(page.locator('#quote-quality-panel')).toContainText('缺少 price_date：2330');
   await expect(page.locator('#card-monthly-passive-income')).toHaveText('$249.17');
   await expect(page.locator('#passive-income-progress-text')).toHaveText('24.9%');
+  await page.locator('#tab-btn-dashboard').click();
+  await expect(page.locator('#portfolioAssetSparkline')).toBeVisible();
+  await expect(page.locator('#today-transactions-body tr').first().locator('td')).toHaveCount(3);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.locator('#tab-btn-history').click();
   await expect(page.locator('#tab-content-history')).toBeVisible();
   await expect(page.locator('#tab-content-dashboard')).toBeHidden();

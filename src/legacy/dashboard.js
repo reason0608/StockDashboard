@@ -1,5 +1,5 @@
 import * as lucide from '../shared/icons.js';
-import { renderContributionSummary, renderAssetAllocationSummary, renderPortfolioHistoryChart } from './charts.js';
+import { renderContributionSummary, renderAssetAllocationSummary, renderPortfolioHistoryChart, renderPortfolioAssetSparkline } from './charts.js';
 import { escapeHtml, formatNumber } from '../shared/format.js';
 import { toggleTab } from '../router';
 import { loadLedger } from '../services/dividends';
@@ -424,6 +424,7 @@ import { analyzeQuoteQuality } from '../domain/quoteQuality';
             document.getElementById('card-total-dividends').textContent = `$${formatNumber(totalDividends, 2)}`;
             renderPassiveIncome();
             renderPortfolioHistoryChart(state.portfolioSnapshots);
+            renderPortfolioAssetSparkline(state.portfolioSnapshots);
 
             const pnlElement = document.getElementById('card-unrealized-pnl');
             const roiElement = document.getElementById('card-roi');
@@ -458,7 +459,7 @@ import { analyzeQuoteQuality } from '../domain/quoteQuality';
             if (todayTrans.length === 0) {
                 todayBody.innerHTML = `
                     <tr>
-                        <td colspan="5" class="px-4 py-8 text-center text-slate-500">
+                        <td colspan="3" class="px-3 py-8 text-center text-slate-500">
                             今日無交易買賣。下單後點選「新增交易紀錄」，將同步更新於此，方便直接截圖發到群組。
                         </td>
                     </tr>
@@ -470,17 +471,14 @@ import { analyzeQuoteQuality } from '../domain/quoteQuality';
                         : `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] sm:text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">賣出</span>`;
                     return `
                         <tr class="hover:bg-slate-900/40">
-                            <td class="px-3 sm:px-4 py-3 whitespace-nowrap">${typeBadge}</td>
-                            <td class="px-3 sm:px-4 py-3">
-                                <div class="font-semibold text-slate-200">${escapeHtml(t.stock_code)} <span class="text-[10px] sm:text-xs text-slate-400 font-normal">${escapeHtml(t.stock_name)}</span></div>
-                                <!-- 手機版專屬折疊資訊 (單價與股數)，消除 Scrollbar -->
-                                <div class="text-[10px] text-slate-400 font-mono mt-0.5 sm:hidden">
+                            <td class="px-2 py-3 whitespace-nowrap">${typeBadge}</td>
+                            <td class="px-2 py-3 min-w-0">
+                                <div class="font-semibold text-slate-200 truncate">${escapeHtml(t.stock_code)} <span class="text-[10px] text-slate-400 font-normal">${escapeHtml(t.stock_name)}</span></div>
+                                <div class="text-[10px] text-slate-400 font-mono mt-0.5 whitespace-nowrap">
                                     ${formatNumber(t.shares)} 股 × $${formatNumber(t.price, 2)}
                                 </div>
                             </td>
-                            <td class="px-3 sm:px-4 py-3 text-right font-mono hidden sm:table-cell">$${formatNumber(t.price, 2)}</td>
-                            <td class="px-3 sm:px-4 py-3 text-right font-mono hidden sm:table-cell">${formatNumber(t.shares)} 股</td>
-                            <td class="px-3 sm:px-4 py-3 text-right font-mono text-slate-200 font-semibold whitespace-nowrap">$${formatNumber(t.total_amount)}</td>
+                            <td class="px-2 py-3 text-right font-mono text-slate-200 font-semibold whitespace-nowrap">$${formatNumber(t.total_amount)}</td>
                         </tr>
                     `;
                 }).join('');

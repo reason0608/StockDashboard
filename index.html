@@ -137,7 +137,7 @@
             </div>
 
             <!-- 出資與資產配置明細 -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
                 <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl shadow-lg">
                     <div>
                         <h4 class="text-md font-bold text-slate-100 flex items-center gap-2">
@@ -163,10 +163,9 @@
                         <!-- 動態填充持股比重 -->
                     </div>
                 </div>
-            </div>
 
             <!-- 今日交易明細 (快速截圖特區 - 響應式優化) -->
-            <div class="bg-slate-900 border border-slate-800 p-4 sm:p-6 rounded-xl shadow-lg" id="screenshot-area">
+            <div class="bg-slate-900 border border-slate-800 p-4 sm:p-5 rounded-xl shadow-lg min-w-0" id="screenshot-area">
                 <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
                     <div>
                         <h4 class="text-sm sm:text-md font-bold text-slate-100 flex items-center gap-2">
@@ -184,14 +183,12 @@
                 </div>
 
                 <div class="overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
-                    <table class="min-w-full divide-y divide-slate-800 text-xs sm:text-sm">
+                    <table class="w-full table-fixed divide-y divide-slate-800 text-xs">
                         <thead class="bg-slate-900/60 text-slate-400 text-left font-semibold">
                             <tr>
-                                <th class="px-3 sm:px-4 py-3 whitespace-nowrap">交易類別</th>
-                                <th class="px-3 sm:px-4 py-3">股票代號/名稱</th>
-                                <th class="px-3 sm:px-4 py-3 text-right hidden sm:table-cell">成交單價</th>
-                                <th class="px-3 sm:px-4 py-3 text-right hidden sm:table-cell">成交股數</th>
-                                <th class="px-3 sm:px-4 py-3 text-right whitespace-nowrap">交易總金額</th>
+                                <th class="w-16 px-2 py-3 whitespace-nowrap">類別</th>
+                                <th class="px-2 py-3">股票／成交資訊</th>
+                                <th class="w-24 px-2 py-3 text-right whitespace-nowrap">總金額</th>
                             </tr>
                         </thead>
                         <tbody id="today-transactions-body" class="divide-y divide-slate-800">
@@ -199,6 +196,15 @@
                         </tbody>
                     </table>
                 </div>
+            </div>
+            </div>
+
+            <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-lg overflow-hidden">
+                <div class="flex items-center justify-between gap-3">
+                    <div><h4 class="font-bold text-slate-100">歷史資產軌跡</h4><p class="text-xs text-slate-400 mt-1">日期隱藏於 X 軸；滑鼠移至折線即可查看日期與資產。</p></div>
+                    <button data-event="click" data-action="toggleTab" data-arg="history" class="text-xs text-indigo-300 hover:text-indigo-200 whitespace-nowrap">查看完整趨勢</button>
+                </div>
+                <div class="h-40 mt-2 min-w-0"><canvas id="portfolioAssetSparkline"></canvas><div id="portfolio-asset-sparkline-empty" class="h-full flex items-center justify-center text-sm text-slate-500">尚無每日資產快照。</div></div>
             </div>
         </section>
 

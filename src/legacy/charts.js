@@ -1,6 +1,7 @@
 import Chart from 'chart.js/auto';
 import { escapeHtml, formatNumber } from '../shared/format.js';
 let portfolioHistoryChartInstance = null;
+let portfolioAssetSparklineInstance = null;
         // --- 5. 出資與資產比重明細（精簡總覽，不繪製圓餅圖） ---
         export function renderContributionSummary(husband, wife, joint, husbandName, wifeName) {
             const total = husband + wife + joint;
@@ -95,9 +96,38 @@ export function renderPortfolioHistoryChart(snapshots) {
             scales: {
                 assets: { position: 'left', ticks: { color: '#94a3b8', callback: value => '$' + formatNumber(value) }, grid: { color: '#1e293b' } },
                 income: { position: 'right', ticks: { color: '#fbbf24', callback: value => '$' + formatNumber(value) }, grid: { drawOnChartArea: false } },
-                x: { ticks: { color: '#94a3b8', maxTicksLimit: 8 }, grid: { display: false } },
+                x: { ticks: { display: false }, grid: { display: false } },
             },
             plugins: { legend: { labels: { color: '#cbd5e1' } } },
+        },
+    });
+}
+
+/** 總覽用精簡資產軌跡：隱藏日期刻度，日期僅在滑鼠 tooltip 顯示。 */
+export function renderPortfolioAssetSparkline(snapshots) {
+    const canvas = document.getElementById('portfolioAssetSparkline');
+    const empty = document.getElementById('portfolio-asset-sparkline-empty');
+    if (!canvas || !empty) return;
+    const rows = [...snapshots]
+        .filter(row => /^\d{4}-\d{2}-\d{2}$/.test(String(row.snapshot_date || '')))
+        .sort((a, b) => String(a.snapshot_date).localeCompare(String(b.snapshot_date)));
+    empty.classList.toggle('hidden', rows.length > 0);
+    canvas.classList.toggle('hidden', rows.length === 0);
+    if (portfolioAssetSparklineInstance) portfolioAssetSparklineInstance.destroy();
+    if (!rows.length) return;
+    portfolioAssetSparklineInstance = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: rows.map(row => row.snapshot_date),
+            datasets: [{ label: '總資產', data: rows.map(row => Number(row.total_assets) || 0), borderColor: '#818cf8', backgroundColor: '#818cf826', fill: true, tension: 0.25, pointRadius: 0, pointHoverRadius: 4 }],
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+            scales: {
+                x: { ticks: { display: false }, grid: { display: false }, border: { display: false } },
+                y: { ticks: { color: '#94a3b8', maxTicksLimit: 4, callback: value => '$' + formatNumber(value) }, grid: { color: '#1e293b' } },
+            },
+            plugins: { legend: { display: false } },
         },
     });
 }
