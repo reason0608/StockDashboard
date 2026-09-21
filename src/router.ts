@@ -1,4 +1,4 @@
-const tabs = ['dashboard', 'cash-flow', 'inventory', 'dividends', 'transactions', 'settings'];
+const tabs = ['dashboard', 'cash-flow', 'inventory', 'dividends', 'history', 'transactions', 'settings'];
 
 /** 切換白名單分頁並保存 hash，讓 Pages 重新整理與上一頁都可使用。 */
 export function toggleTab(requested: string) {
@@ -11,6 +11,7 @@ export function toggleTab(requested: string) {
       button.setAttribute('aria-current', id === tab ? 'page' : 'false');
     }
   }
+  if (tab === 'history') requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
   if (location.hash !== `#/${tab}`) location.hash = `/${tab}`;
 }
 

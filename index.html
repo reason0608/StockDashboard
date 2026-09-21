@@ -71,6 +71,9 @@
                 <i data-lucide="briefcase" class="w-4 h-4"></i> 現有持股庫存
             </button>
             <button data-event="click" data-action="toggleTab" data-arg="dividends" id="tab-btn-dividends" class="px-4 py-2.5 border-b-2 border-transparent font-medium text-sm text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap"><i data-lucide="calendar-days" class="w-4 h-4"></i> 股息追蹤</button>
+            <button data-event="click" data-action="toggleTab" data-arg="history" id="tab-btn-history" class="px-4 py-2.5 border-b-2 border-transparent font-medium text-sm text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap transition-all">
+                <i data-lucide="line-chart" class="w-4 h-4"></i> 歷史趨勢
+            </button>
             <button data-event="click" data-action="toggleTab" data-arg="transactions" id="tab-btn-transactions" class="px-4 py-2.5 border-b-2 border-transparent font-medium text-sm text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap transition-all">
                 <i data-lucide="history" class="w-4 h-4"></i> 每日交易紀錄
             </button>
@@ -81,7 +84,7 @@
         <!-- ==================== 1. 總覽看板 ==================== -->
         <section id="tab-content-dashboard" class="space-y-6">
             <!-- 核心指標卡片區 -->
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                 <!-- 總資產 -->
                 <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl shadow-lg relative overflow-hidden group">
                     <div class="absolute right-3 top-3 opacity-10 group-hover:opacity-20 transition-all text-indigo-500">
@@ -123,19 +126,13 @@
                     <h3 id="card-total-dividends" class="text-3xl font-extrabold text-amber-400 mt-2">$0</h3>
                     <p class="text-xs text-slate-400 mt-1">自動滾入現金餘額中</p>
                 </div>
-            </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl shadow-lg">
+                <!-- 每月被動收入 -->
+                <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl shadow-lg relative overflow-hidden">
                     <p class="text-sm text-slate-400">近 12 個月平均每月被動收入</p>
-                    <p id="card-monthly-passive-income" class="text-3xl font-extrabold text-amber-300 mt-2">$0</p>
-                    <div class="flex justify-between text-xs text-slate-400 mt-3"><span>共同目標 <strong id="passive-income-target">$0</strong></span><span id="passive-income-progress-text">尚未設定</span></div>
+                    <p id="card-monthly-passive-income" class="text-2xl font-extrabold text-amber-300 mt-2">$0</p>
+                    <div class="flex justify-between gap-2 text-xs text-slate-400 mt-2"><span>目標 <strong id="passive-income-target">$0</strong></span><span id="passive-income-progress-text">尚未設定</span></div>
                     <div class="h-2 bg-slate-800 rounded-full overflow-hidden mt-2"><div id="passive-income-progress-bar" class="h-full bg-gradient-to-r from-amber-500 to-emerald-400 rounded-full transition-all" style="width:0%"></div></div>
-                    <p class="text-xs text-slate-500 mt-3">以最近 12 個月已入帳股息 ÷ 12 計算；目標可在系統設定修改。</p>
-                </div>
-                <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl shadow-lg lg:col-span-2">
-                    <div><h4 class="font-bold text-slate-100">資產與被動收入歷史</h4><p class="text-xs text-slate-400 mt-1">資料來自 portfolio_daily_snapshots；左右軸分別顯示資產與近 12 月平均月股息。</p></div>
-                    <div class="h-72 mt-4"><canvas id="portfolioHistoryChart"></canvas><div id="portfolio-history-empty" class="h-full flex items-center justify-center text-sm text-slate-500">尚無每日快照。完成 Apps Script 設定後將逐日累積。</div></div>
                 </div>
             </div>
 
@@ -216,6 +213,18 @@
                         </tbody>
                     </table>
                 </div>
+            </div>
+        </section>
+
+        <!-- ==================== 歷史趨勢 ==================== -->
+        <section id="tab-content-history" class="hidden space-y-4">
+            <div>
+                <h2 class="text-xl font-bold">資產與被動收入歷史</h2>
+                <p class="text-xs text-slate-400 mt-1">追蹤共同投資帳戶的長期資產累積與近 12 月平均月股息。</p>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 p-5 rounded-xl shadow-lg">
+                <p class="text-xs text-slate-400">資料來自 portfolio_daily_snapshots；左右軸分別顯示資產與近 12 月平均月股息。</p>
+                <div class="h-[28rem] mt-4"><canvas id="portfolioHistoryChart"></canvas><div id="portfolio-history-empty" class="h-full flex items-center justify-center text-sm text-slate-500">尚無每日快照。完成 Apps Script 設定後將逐日累積。</div></div>
             </div>
         </section>
 

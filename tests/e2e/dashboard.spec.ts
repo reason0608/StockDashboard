@@ -14,6 +14,8 @@ test('既有分頁與新增交易表單可操作，重新整理 hash 保留分�
   page.on('pageerror', e => errors.push(e.message));
   await page.goto('./');
   await expect(page.locator('#card-total-assets')).not.toHaveText('$0');
+  await expect(page.locator('#tab-content-dashboard #card-monthly-passive-income')).toHaveCount(1);
+  await expect(page.locator('#tab-content-dashboard #portfolioHistoryChart')).toHaveCount(0);
   await page.locator('#tab-btn-inventory').click();
   await expect(page.locator('#inventory-table-body')).toContainText('2330');
   await expect(page.locator('#tab-content-inventory')).toContainText('已領股息');
@@ -81,7 +83,9 @@ test('Sheets 持股與 Demo 快照分離，外部股票名稱不執行 HTML', as
   await expect(page.locator('#quote-quality-panel')).toContainText('缺少 price_date：2330');
   await expect(page.locator('#card-monthly-passive-income')).toHaveText('$249.17');
   await expect(page.locator('#passive-income-progress-text')).toHaveText('24.9%');
-  await page.locator('#tab-btn-dashboard').click();
+  await page.locator('#tab-btn-history').click();
+  await expect(page.locator('#tab-content-history')).toBeVisible();
+  await expect(page.locator('#tab-content-dashboard')).toBeHidden();
   await expect(page.locator('#portfolioHistoryChart')).toBeVisible();
   await page.locator('#tab-btn-inventory').click();
   await expect(page.locator('#inventory-table-body')).toContainText('<img src=x onerror=alert(1)>');
