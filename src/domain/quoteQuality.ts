@@ -17,6 +17,32 @@ export interface QuoteQuality {
   newestQuoteDate: string | null;
 }
 
+export interface TransactionPricePerformance {
+  currentPrice: number;
+  priceDifference: number;
+  profitLoss: number;
+  returnPercent: number;
+}
+
+/**
+ * 以最新報價計算單筆買入的純價差表現；不含配息、手續費與證交稅。
+ * 賣出紀錄已結束部位，沒有成本批次配對前不推算已實現損益。
+ */
+export function calculateTransactionPricePerformance(transaction: { action?: unknown; price?: unknown; shares?: unknown }, currentPrice: unknown): TransactionPricePerformance | null {
+  if (String(transaction.action || '').trim() !== '買入') return null;
+  const price = Number(transaction.price);
+  const shares = Number(transaction.shares);
+  const latest = Number(currentPrice);
+  if (!Number.isFinite(price) || price <= 0 || !Number.isSafeInteger(shares) || shares <= 0 || !Number.isFinite(latest) || latest <= 0) return null;
+  const priceDifference = latest - price;
+  return {
+    currentPrice: latest,
+    priceDifference: Math.round(priceDifference * 100) / 100,
+    profitLoss: Math.round(priceDifference * shares * 100) / 100,
+    returnPercent: Math.round(priceDifference / price * 10000) / 100
+  };
+}
+
 /** 將試算表日期正規化為台北日曆日；無法辨識時回傳 null。 */
 function quoteDate(value: unknown): string | null {
   if (typeof value === 'string') {

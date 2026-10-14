@@ -31,6 +31,10 @@ test('既有分頁與新增交易表單可操作，重新整理 hash 保留分�
   await page.reload();
   await expect(page.locator('#tab-content-inventory')).toBeVisible();
   await page.locator('#tab-btn-transactions').click();
+  const pricedTransaction = page.locator('#transactions-table-body tr').filter({ hasText: '2330' }).first();
+  await expect(pricedTransaction).toContainText('$1,045.00');
+  await expect(pricedTransaction).toContainText('+$400.00');
+  await expect(pricedTransaction).toContainText('+1.95%');
   await page.getByRole('button', { name: '新增交易紀錄' }).click();
   await page.locator('#tx-code').fill('2317'); await page.locator('#tx-name').fill('鴻海');
   await page.locator('#tx-price').fill('100'); await page.locator('#tx-shares').fill('10');

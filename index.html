@@ -296,6 +296,7 @@
                 <div>
                     <h2 class="text-xl font-bold">每日交易歷史紀錄</h2>
                     <p class="text-xs text-slate-400 font-mono">對應試算表中的 「daily_transactions」 工作表</p>
+                    <p class="text-xs text-slate-500 mt-1">買入紀錄依庫存最新報價計算純價差，不含配息、手續費與證交稅；賣出紀錄不推算。</p>
                 </div>
                 <button data-event="click" data-action="openModal" data-arg="transaction-modal" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-1.5 shadow transition">
                     <i data-lucide="plus" class="w-4 h-4"></i> 新增交易紀錄
@@ -315,6 +316,9 @@
                                 <th class="px-6 py-3.5 text-right">手續費</th>
                                 <th class="px-6 py-3.5 text-right">證交稅</th>
                                 <th class="px-6 py-3.5 text-right">總金額</th>
+                                <th class="px-6 py-3.5 text-right">最新報價</th>
+                                <th class="px-6 py-3.5 text-right">價差損益</th>
+                                <th class="px-6 py-3.5 text-right">損益率</th>
                             </tr>
                         </thead>
                         <tbody id="transactions-table-body" class="divide-y divide-slate-800">

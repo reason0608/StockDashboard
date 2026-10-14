@@ -4,7 +4,7 @@ import { escapeHtml, formatNumber } from '../shared/format.js';
 import { toggleTab } from '../router';
 import { loadLedger } from '../services/dividends';
 import { realizedDividends, realizedDividendsByStock, realizedDividendsSince } from '../domain/entitlements';
-import { analyzeQuoteQuality } from '../domain/quoteQuality';
+import { analyzeQuoteQuality, calculateTransactionPricePerformance } from '../domain/quoteQuality';
 
         // =========================================================================
         // ⚙️ 統一雲端連線設定：在此處貼上您的 Google Apps Script Web App URL。
@@ -581,7 +581,7 @@ import { analyzeQuoteQuality } from '../domain/quoteQuality';
             const sorted = [...state.transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
 
             if (sorted.length === 0) {
-                body.innerHTML = `<tr><td colspan="10" class="px-6 py-10 text-center text-slate-500">尚無交易紀錄，點擊右上方新增。</td></tr>`;
+                body.innerHTML = `<tr><td colspan="11" class="px-6 py-10 text-center text-slate-500">尚無交易紀錄，點擊右上方新增。</td></tr>`;
                 return;
             }
 
@@ -589,6 +589,13 @@ import { analyzeQuoteQuality } from '../domain/quoteQuality';
                 const actionBadge = t.action === "買入"
                     ? `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">買入</span>`
                     : `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">賣出</span>`;
+                const quote = state.inventory.find(item => String(item.stock_code).trim() === String(t.stock_code).trim());
+                const performance = calculateTransactionPricePerformance(t, quote?.current_price);
+                const performanceClass = performance && performance.profitLoss >= 0 ? 'text-red-400' : 'text-emerald-400';
+                const signed = value => `${value >= 0 ? '+' : '-'}$${formatNumber(Math.abs(value), 2)}`;
+                const quoteText = performance ? `$${formatNumber(performance.currentPrice, 2)}` : (t.action === '賣出' ? '已賣出' : '報價不足');
+                const pnlText = performance ? signed(performance.profitLoss) : '—';
+                const roiText = performance ? `${performance.returnPercent >= 0 ? '+' : ''}${formatNumber(performance.returnPercent, 2)}%` : '—';
                 return `
                     <tr class="hover:bg-slate-900/50">
                         <td class="px-6 py-4 text-slate-300 font-mono">${escapeHtml(formatDateTaipei(t.date))}</td>
@@ -599,6 +606,9 @@ import { analyzeQuoteQuality } from '../domain/quoteQuality';
                         <td class="px-6 py-4 text-right font-mono text-slate-400">$${formatNumber(t.fee)}</td>
                         <td class="px-6 py-4 text-right font-mono text-slate-400">$${formatNumber(t.tax || 0)}</td>
                         <td class="px-6 py-4 text-right font-mono text-white font-bold">$${formatNumber(t.total_amount)}</td>
+                        <td class="px-6 py-4 text-right font-mono text-slate-200">${quoteText}</td>
+                        <td class="px-6 py-4 text-right font-mono font-bold ${performance ? performanceClass : 'text-slate-500'}">${pnlText}</td>
+                        <td class="px-6 py-4 text-right font-mono font-bold ${performance ? performanceClass : 'text-slate-500'}">${roiText}</td>
                     </tr>
                 `;
             }).join('');
