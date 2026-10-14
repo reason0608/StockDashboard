@@ -18,17 +18,18 @@ describe('ETF 配息目標', () => {
     expect(result.requiredCapital).toBe(0);
   });
   it('沒有歷史配息時不猜測所需股數', () => expect(projectDividendGoals({ monthlyTarget: 1000, items: [{ stockCode: '00999', stockName: '新 ETF' }] }, events, [], '2026-10-14')[0].requiredShares).toBeNull());
-  it('同月 ETF 平均分攤目標金額', () => {
+  it('同月 ETF 依每股配息比例分攤目標金額', () => {
     const octoberEvents: Dividend[] = [
-      { ...events[0], id: '00919:2026-09-20', stockCode: '00919', exDate: '2026-09-20', paymentDate: '2026-10-15', cashPerShare: 0.5 },
-      { ...events[0], id: '00918:2026-09-21', stockCode: '00918', exDate: '2026-09-21', paymentDate: '2026-10-16', cashPerShare: 0.25 }
+      { ...events[0], id: '00919:2026-09-20', stockCode: '00919', exDate: '2026-09-20', paymentDate: '2026-10-15', cashPerShare: 1.1 },
+      { ...events[0], id: '00918:2026-09-21', stockCode: '00918', exDate: '2026-09-21', paymentDate: '2026-10-16', cashPerShare: 1.75 }
     ];
-    const plan = { monthlyTarget: 10000, items: [{ stockCode: '00919', stockName: 'A' }, { stockCode: '00918', stockName: 'B' }] };
+    const plan = { monthlyTarget: 1000, items: [{ stockCode: '00919', stockName: 'A' }, { stockCode: '00918', stockName: 'B' }] };
     const projections = projectDividendGoals(plan, octoberEvents, [], '2026-10-14');
-    expect(projections.map(item => item.recommendedShares)).toEqual([10000, 20000]);
+    expect(projections.map(item => item.recommendedShares)).toEqual([351, 351]);
     const october = projectDividendGoalMonths(plan, projections)[9];
-    expect(october.etfs.map(item => item.targetIncome)).toEqual([5000, 5000]);
-    expect(october.recommendedIncome).toBe(10000);
+    expect(october.etfs[0].targetIncome).toBeCloseTo(1000 / 2.85 * 1.1);
+    expect(october.etfs[1].targetIncome).toBeCloseTo(1000 / 2.85 * 1.75);
+    expect(october.recommendedIncome).toBeCloseTo(1000.35);
   });
   it('每月資料採該曆月最新發放週期', () => {
     const profile = monthlyDividendPerShare([...events, { ...events[0], id: '0056:2025-01-10', exDate: '2025-01-10', paymentDate: '2025-02-01', cashPerShare: 9 }], '0056', '2026-10-14');

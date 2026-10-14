@@ -221,7 +221,7 @@ onUnmounted(() => window.removeEventListener('portfolio-updated', syncPortfolio)
       </div>
       <div class="flex flex-wrap items-center justify-between gap-3"><p class="text-sm text-slate-300">目前預估月均 {{ money(projectedMonthlyIncome) }}／目標 {{ money(goalMonthly) }}</p><button type="button" class="primary" :disabled="goalSaving" @click="persistGoalPlan">{{ goalSaving ? '儲存中…' : '儲存投資目標' }}</button></div>
       <p v-if="goalMessage" class="banner" role="status">{{ goalMessage }}</p>
-      <p class="hint">依近期實際／已公告發放月份推估。同月發放的 ETF 平均分攤該月目標；同一 ETF 採各發放月所需股數的最大值，確保每個已覆蓋月份都能達到分配給它的金額。未覆蓋月份需再加入該月會發放的 ETF。</p>
+      <p class="hint">依近期實際／已公告發放月份推估。同月發放的 ETF 依每股配息比例分攤該月目標，因此建議持有相同股數；同一 ETF 採各發放月所需股數的最大值，確保每個已覆蓋月份都能達到分配給它的金額。未覆蓋月份需再加入該月會發放的 ETF。</p>
     </div>
     <div class="panel">
       <h3 class="font-semibold">每月預估股息 <span class="text-xs text-slate-400 font-normal">依交易紀錄股數，每筆固定扣除 NT$10</span></h3>

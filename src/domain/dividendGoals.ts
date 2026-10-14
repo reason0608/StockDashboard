@@ -86,11 +86,11 @@ export function monthlyDividendPerShare(events: Dividend[], stockCode: string, t
   return Object.fromEntries([...latestByMonth].map(([month, value]) => [month, Math.round((value.amount + Number.EPSILON) * 1e8) / 1e8]));
 }
 
-/** 每月目標由當月發放 ETF 平均分攤；同一 ETF 採各發放月所需總股數的最大值。 */
+/** 每月目標依當月每股配息比例分攤；同一 ETF 採各發放月所需總股數的最大值。 */
 export function projectDividendGoals(plan: DividendGoalPlan, events: Dividend[], holdings: Holding[], today: string): DividendGoalProjection[] {
   const profiles = new Map(plan.items.map(item => [item.stockCode, monthlyDividendPerShare(events, item.stockCode, today)]));
-  const activeCount = new Map<number, number>();
-  for (const profile of profiles.values()) for (const month of Object.keys(profile).map(Number)) activeCount.set(month, (activeCount.get(month) || 0) + 1);
+  const monthlyDividendTotals = new Map<number, number>();
+  for (const profile of profiles.values()) for (const month of Object.keys(profile).map(Number)) monthlyDividendTotals.set(month, (monthlyDividendTotals.get(month) || 0) + profile[month]);
   return plan.items.map(item => {
     const holding = holdings.find(row => String(row.stock_code).trim() === item.stockCode);
     const shares = Math.max(0, Number(holding?.total_shares) || 0);
@@ -98,7 +98,8 @@ export function projectDividendGoals(plan: DividendGoalPlan, events: Dividend[],
     const payoutMonths = Object.keys(monthlyProfile).map(Number).sort((a, b) => a - b);
     const annualDividendPerShare = Math.round((Object.values(monthlyProfile).reduce((sum, value) => sum + value, 0) + Number.EPSILON) * 1e8) / 1e8;
     const projectedAnnualIncome = Math.round((shares * annualDividendPerShare + Number.EPSILON) * 100) / 100;
-    const candidates = payoutMonths.map(month => Math.ceil((plan.monthlyTarget / (activeCount.get(month) || 1)) / monthlyProfile[month]));
+    // 目標金額依每股配息占比分配後再除回每股配息，等價於同月 ETF 採相同目標股數。
+    const candidates = payoutMonths.map(month => Math.ceil(plan.monthlyTarget / (monthlyDividendTotals.get(month) || monthlyProfile[month])));
     const recommendedShares = candidates.length ? Math.max(...candidates) : null;
     const requiredShares = recommendedShares === null ? null : Math.max(0, recommendedShares - shares);
     const price = Number(holding?.current_price);
@@ -115,12 +116,12 @@ export function projectDividendGoalMonths(plan: DividendGoalPlan, projections: D
   return Array.from({ length: 12 }, (_, index) => {
     const month = index + 1;
     const active = projections.filter(item => item.monthlyDividendPerShare[month] > 0);
-    const targetIncome = active.length ? plan.monthlyTarget / active.length : 0;
+    const totalDividendPerShare = active.reduce((sum, item) => sum + item.monthlyDividendPerShare[month], 0);
     const etfs = active.map(item => ({
       stockCode: item.stockCode,
       dividendPerShare: item.monthlyDividendPerShare[month],
-      targetIncome,
-      recommendedShares: Math.ceil(targetIncome / item.monthlyDividendPerShare[month])
+      targetIncome: totalDividendPerShare > 0 ? plan.monthlyTarget * item.monthlyDividendPerShare[month] / totalDividendPerShare : 0,
+      recommendedShares: totalDividendPerShare > 0 ? Math.ceil(plan.monthlyTarget / totalDividendPerShare) : 0
     }));
     return {
       month,
