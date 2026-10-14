@@ -4,7 +4,7 @@ import { reloadData, state } from '../legacy/dashboard.js';
 import { estimateDividend, parseLedger, relevantEvents, taipeiToday, type Dividend, type Feed, type Holding, type Ledger } from '../domain/dividends';
 import { loadFeed, loadLedger, saveDividendGoals, saveLedger } from '../services/dividends';
 import { DEFAULT_REMITTANCE_FEE, eligibleShares, isDividendReceived, netDividend, resolvedShares, transactionStockCodes, type Transaction } from '../domain/entitlements';
-import { parseDividendGoalPlan, projectDividendGoals, type DividendGoalItem } from '../domain/dividendGoals';
+import { parseDividendGoalPlan, projectDividendGoalMonths, projectDividendGoals, type DividendGoalItem } from '../domain/dividendGoals';
 
 const feed = ref<Feed>({ version: 1, updatedAt: null, events: [], sources: [] });
 const ledger = ref<Ledger>({ version: 1, confirmations: {} });
@@ -49,7 +49,8 @@ const etfOptions = computed(() => {
 });
 const goalPlan = computed(() => parseDividendGoalPlan({ monthlyTarget: goalMonthly.value, items: goalItems.value }));
 const goalProjection = computed(() => projectDividendGoals(goalPlan.value, feed.value.events, holdings.value, taipeiToday()));
-const projectedMonthlyIncome = computed(() => goalProjection.value.reduce((sum, item) => sum + item.projectedAnnualIncome, 0) / 12);
+const goalMonthProjection = computed(() => projectDividendGoalMonths(goalPlan.value, goalProjection.value));
+const projectedMonthlyIncome = computed(() => goalMonthProjection.value.reduce((sum, item) => sum + item.currentIncome, 0) / 12);
 const goalProgress = computed(() => goalMonthly.value > 0 ? Math.min(100, projectedMonthlyIncome.value / goalMonthly.value * 100) : 0);
 const goalChanged = computed(() => JSON.stringify(goalPlan.value) !== JSON.stringify({ monthlyTarget: savedGoalMonthly.value, items: savedGoalItems.value }));
 
@@ -206,14 +207,21 @@ onUnmounted(() => window.removeEventListener('portfolio-updated', syncPortfolio)
       </div>
       <div v-if="goalItems.length" class="overflow-x-auto border border-slate-800 rounded-lg">
         <table class="w-full text-sm text-left whitespace-nowrap">
-          <thead class="bg-slate-950/50 text-slate-400"><tr><th>ETF</th><th>目前股數</th><th>近 12 月每股配息</th><th>預估月均配息</th><th>尚需股數</th><th>尚需資金（約）</th><th></th></tr></thead>
-          <tbody class="divide-y divide-slate-800"><tr v-for="item in goalProjection" :key="item.stockCode"><td><strong>{{ item.stockCode }}</strong><p class="text-xs text-slate-400">{{ item.stockName }}</p></td><td>{{ item.shares.toLocaleString('zh-TW') }}</td><td>{{ item.annualDividendPerShare ? item.annualDividendPerShare.toLocaleString('zh-TW') : '資料不足' }}</td><td>{{ money(item.projectedAnnualIncome / 12) }}</td><td>{{ item.requiredShares === null ? '待配息資料' : item.requiredShares.toLocaleString('zh-TW') }}</td><td>{{ item.requiredCapital === null ? '待股價資料' : money(item.requiredCapital) }}</td><td><button type="button" class="text-rose-300 hover:text-rose-200" @click="removeGoalItem(item.stockCode)">移除</button></td></tr></tbody>
+          <thead class="bg-slate-950/50 text-slate-400"><tr><th>ETF</th><th>預估發放月份</th><th>目前股數</th><th>建議總股數</th><th>尚需股數</th><th>尚需資金（約）</th><th></th></tr></thead>
+          <tbody class="divide-y divide-slate-800"><tr v-for="item in goalProjection" :key="item.stockCode"><td><strong>{{ item.stockCode }}</strong><p class="text-xs text-slate-400">{{ item.stockName }}</p></td><td>{{ item.payoutMonths.length ? item.payoutMonths.map(month => `${month}月`).join('、') : '資料不足' }}</td><td>{{ item.shares.toLocaleString('zh-TW') }}</td><td>{{ item.recommendedShares === null ? '待配息資料' : item.recommendedShares.toLocaleString('zh-TW') }}</td><td>{{ item.requiredShares === null ? '待配息資料' : item.requiredShares.toLocaleString('zh-TW') }}</td><td>{{ item.requiredCapital === null ? '待股價資料' : money(item.requiredCapital) }}</td><td><button type="button" class="text-rose-300 hover:text-rose-200" @click="removeGoalItem(item.stockCode)">移除</button></td></tr></tbody>
         </table>
       </div>
       <p v-else class="text-sm text-slate-400">尚未選擇 ETF。</p>
+      <div v-if="goalItems.length" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+        <div v-for="month in goalMonthProjection" :key="month.month" class="rounded-lg border p-3" :class="month.etfs.length ? 'border-slate-800 bg-slate-950/50' : 'border-amber-500/30 bg-amber-500/5'">
+          <div class="flex items-center justify-between gap-2"><strong>{{ month.month }} 月</strong><span class="text-xs" :class="month.etfs.length ? 'text-slate-400' : 'text-amber-300'">{{ month.etfs.length ? `${month.etfs.length} 檔` : '無配息 ETF' }}</span></div>
+          <div v-if="month.etfs.length" class="mt-3 space-y-2 text-xs"><p v-for="etf in month.etfs" :key="etf.stockCode"><span class="text-indigo-300">{{ etf.stockCode }}</span> 負責 {{ money(etf.targetIncome) }}<br><span class="text-slate-400">約 {{ etf.recommendedShares.toLocaleString('zh-TW') }} 股 × {{ etf.dividendPerShare }}</span></p><p class="pt-2 border-t border-slate-800 text-slate-300">目前約 {{ money(month.currentIncome) }}</p></div>
+          <p v-else class="text-xs text-amber-200 mt-3">目前選擇無法覆蓋本月 NT$ {{ goalMonthly.toLocaleString('zh-TW') }} 目標。</p>
+        </div>
+      </div>
       <div class="flex flex-wrap items-center justify-between gap-3"><p class="text-sm text-slate-300">目前預估月均 {{ money(projectedMonthlyIncome) }}／目標 {{ money(goalMonthly) }}</p><button type="button" class="primary" :disabled="goalSaving" @click="persistGoalPlan">{{ goalSaving ? '儲存中…' : '儲存投資目標' }}</button></div>
       <p v-if="goalMessage" class="banner" role="status">{{ goalMessage }}</p>
-      <p class="hint">採最近 12 個月已公告的每股配息合計，並將目標平均分配至所選 ETF。股價只影響所需資金；尚需股數由配息紀錄推算。</p>
+      <p class="hint">依近期實際／已公告發放月份推估。同月發放的 ETF 平均分攤該月目標；同一 ETF 採各發放月所需股數的最大值，確保每個已覆蓋月份都能達到分配給它的金額。未覆蓋月份需再加入該月會發放的 ETF。</p>
     </div>
     <div class="panel">
       <h3 class="font-semibold">每月預估股息 <span class="text-xs text-slate-400 font-normal">依交易紀錄股數，每筆固定扣除 NT$10</span></h3>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseDividendGoalPlan, projectDividendGoals, trailingAnnualDividendPerShare } from '../src/domain/dividendGoals';
+import { monthlyDividendPerShare, parseDividendGoalPlan, projectDividendGoalMonths, projectDividendGoals, trailingAnnualDividendPerShare } from '../src/domain/dividendGoals';
 import type { Dividend } from '../src/domain/dividends';
 
 const events: Dividend[] = [
@@ -10,10 +10,28 @@ const events: Dividend[] = [
 describe('ETF 配息目標', () => {
   it('依近 12 月公告合計每股配息', () => expect(trailingAnnualDividendPerShare(events, '0056', '2026-10-14')).toBe(2.5));
   it('去除重複 ETF 並正規化代號', () => expect(parseDividendGoalPlan({ monthlyTarget: 1000, items: [{ stockCode: '0056', stockName: 'A' }, { stockCode: '0056', stockName: 'B' }] }).items).toHaveLength(1));
-  it('股數由配息反推，股價只影響資金', () => {
+  it('股數依各發放月份反推，股價只影響資金', () => {
     const [result] = projectDividendGoals({ monthlyTarget: 1000, items: [{ stockCode: '0056', stockName: 'ETF' }] }, events, [{ stock_code: '0056', stock_name: 'ETF', total_shares: 1000, current_price: 40 }], '2026-10-14');
-    expect(result.requiredShares).toBe(3800);
-    expect(result.requiredCapital).toBe(152000);
+    expect(result.payoutMonths).toEqual([2, 8]);
+    expect(result.recommendedShares).toBe(1000);
+    expect(result.requiredShares).toBe(0);
+    expect(result.requiredCapital).toBe(0);
   });
   it('沒有歷史配息時不猜測所需股數', () => expect(projectDividendGoals({ monthlyTarget: 1000, items: [{ stockCode: '00999', stockName: '新 ETF' }] }, events, [], '2026-10-14')[0].requiredShares).toBeNull());
+  it('同月 ETF 平均分攤目標金額', () => {
+    const octoberEvents: Dividend[] = [
+      { ...events[0], id: '00919:2026-09-20', stockCode: '00919', exDate: '2026-09-20', paymentDate: '2026-10-15', cashPerShare: 0.5 },
+      { ...events[0], id: '00918:2026-09-21', stockCode: '00918', exDate: '2026-09-21', paymentDate: '2026-10-16', cashPerShare: 0.25 }
+    ];
+    const plan = { monthlyTarget: 10000, items: [{ stockCode: '00919', stockName: 'A' }, { stockCode: '00918', stockName: 'B' }] };
+    const projections = projectDividendGoals(plan, octoberEvents, [], '2026-10-14');
+    expect(projections.map(item => item.recommendedShares)).toEqual([10000, 20000]);
+    const october = projectDividendGoalMonths(plan, projections)[9];
+    expect(october.etfs.map(item => item.targetIncome)).toEqual([5000, 5000]);
+    expect(october.recommendedIncome).toBe(10000);
+  });
+  it('每月資料採該曆月最新發放週期', () => {
+    const profile = monthlyDividendPerShare([...events, { ...events[0], id: '0056:2025-01-10', exDate: '2025-01-10', paymentDate: '2025-02-01', cashPerShare: 9 }], '0056', '2026-10-14');
+    expect(profile[2]).toBe(1);
+  });
 });
