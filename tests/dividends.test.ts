@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { dividendStatus, estimateDividend, isDate, parseFeed, parseLedger, relevantEvents, type Dividend, type Feed, type Ledger } from '../src/domain/dividends';
+import { dividendStatus, estimateDividend, isDate, parseFeed, parseLedger, receiptSnapshotsToLedger, relevantEvents, type Dividend, type Feed, type Ledger } from '../src/domain/dividends';
+import { effectiveRemittanceFee } from '../src/domain/entitlements';
 import { normalizeDate, nullableCash, parseExchange, parseEtf, parseFinMind, mergeEvents } from '../scripts/dividend-sources.mjs';
 import { escapeHtml } from '../src/shared/format.js';
 
@@ -36,6 +37,15 @@ describe('股息計算與歷史快照', () => {
     const events = relevantEvents({ ...feed, events: [{ ...event, cashPerShare: 0.8 }] }, [], ledger);
     expect(events[0].cashPerShare).toBe(0.8);
     expect(ledger.confirmations[event.id].shares).toBe(2000);
+  });
+  it('小額配息匯費不超過配息，0 元不收費', () => {
+    expect(effectiveRemittanceFee(6)).toBe(6);
+    expect(effectiveRemittanceFee(0)).toBe(0);
+    expect(effectiveRemittanceFee(100)).toBe(10);
+  });
+  it('將試算表事件快照還原為已入帳 Ledger', () => {
+    const restored = receiptSnapshotsToLedger([{ event_id: event.id, stock_code: event.stockCode, stock_name: event.stockName, ex_date: event.exDate, payment_date: event.paymentDate, cash_per_share: event.cashPerShare, entitled_shares: 2000, remittance_fee: 10, cash_flow_id: 'F1', source: event.source, source_url: event.sourceUrl, event_updated_at: event.updatedAt, captured_at: '2026-08-10' }]);
+    expect(restored.confirmations[event.id]).toMatchObject({ shares: 2000, received: true, remittanceFee: 10, cashFlowId: 'F1' });
   });
 });
 

@@ -39,6 +39,12 @@ export function eligibleShares(transactions: Transaction[], event: Dividend, tod
 
 export const DEFAULT_REMITTANCE_FEE = 10;
 
+/** 匯費不超過本次配息；0 元事件不收費，也不應建立正式快照。 */
+export function effectiveRemittanceFee(gross: number, requested = DEFAULT_REMITTANCE_FEE) {
+  if (!Number.isFinite(gross) || gross < 0 || !Number.isFinite(requested) || requested < 0) throw new Error('配息或匯費不正確');
+  return Math.min(gross, Math.round(requested * 100) / 100);
+}
+
 /** 扣除固定單次匯費；金額不足匯費時淨額以零計。 */
 export function netDividend(gross: number | null, fee: number = DEFAULT_REMITTANCE_FEE): number | null {
   if (gross === null) return null;
@@ -85,12 +91,15 @@ function calculateRealizedDividends(flows: CashFlow[], ledger: Ledger, sinceDate
     if (sinceDate && (!c.event.paymentDate || c.event.paymentDate < sinceDate)) continue;
     const net = netDividend(estimateDividend(c.shares, c.event.cashPerShare));
     if (net === null) continue;
-    if (c.cashFlowId) excluded.add(c.cashFlowId);
-    else {
-      const candidates = matchingFlows(c.event, flows);
-      if (candidates.length === 1) excluded.add(String(candidates[0].id));
-      else if (candidates.length > 1) continue;
+    const candidates = matchingFlows(c.event, flows);
+    const linked = c.cashFlowId ? flows.find(flow => String(flow.id) === c.cashFlowId && isDividendFlow(flow)) : (candidates.length === 1 ? candidates[0] : undefined);
+    if (linked) {
+      excluded.add(String(linked.id));
+      const actual = Number(linked.amount);
+      if (Number.isFinite(actual)) add(linked.stock_code || c.event.stockCode, actual);
+      continue;
     }
+    if (candidates.length > 1) continue;
     add(c.event.stockCode, net);
   }
   for (const flow of flows) {

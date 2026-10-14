@@ -46,6 +46,11 @@ describe('匯費與已落袋股息', () => {
     expect(realizedDividends(flows, ledger)).toBe(110);
     expect(realizedDividendsByStock(flows, ledger)).toEqual({ '2330': 110 });
   });
+  it('快照與流水金額不同時採實際流水，不採估算值', () => {
+    const ledger: Ledger = { version: 1, confirmations: { [event.id]: { event, shares: 20, confirmedAt: '2026-07-09', received: true, remittanceFee: 10, cashFlowId: 'FLOW_1' } } };
+    const flows = [{ id: 'FLOW_1', date: '2026-07-09', stock_code: '2330', type: '股息流入', amount: 105 }];
+    expect(realizedDividends(flows, ledger)).toBe(105);
+  });
   it('沒有對應流水時仍把已到發放日淨額加入總覽', () => {
     const ledger: Ledger = { version: 1, confirmations: { [event.id]: { event, shares: 20, confirmedAt: '2026-07-09', received: true, remittanceFee: 10 } } };
     expect(realizedDividends([], ledger)).toBe(110);

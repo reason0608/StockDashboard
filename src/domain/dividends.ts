@@ -24,6 +24,11 @@ export interface Confirmation {
   cashFlowId?: string;
 }
 export interface Ledger { version: 1; confirmations: Record<string, Confirmation> }
+export interface DividendReceiptSnapshot {
+  event_id: unknown; stock_code: unknown; stock_name: unknown; ex_date: unknown; payment_date: unknown;
+  cash_per_share: unknown; entitled_shares: unknown; remittance_fee: unknown; cash_flow_id?: unknown;
+  source: unknown; source_url: unknown; event_updated_at: unknown; captured_at: unknown;
+}
 export interface Holding {
   stock_code: string;
   stock_name: string;
@@ -97,6 +102,32 @@ export function parseLedger(value: unknown): Ledger {
   const links = Object.values(confirmations).filter(c => c.received && c.cashFlowId).map(c => c.cashFlowId);
   if (new Set(links).size !== links.length) throw new Error('同一筆流水不能重複連結配息');
   return { version: 1, confirmations };
+}
+
+/** 將 Apps Script 的事件型列資料轉回經嚴格驗證的 Ledger，供跨裝置共用。 */
+export function receiptSnapshotsToLedger(value: unknown): Ledger {
+  if (!Array.isArray(value) || value.length > 2000) throw new Error('雲端配息快照格式不正確');
+  const confirmations: Record<string, Confirmation> = {};
+  for (const raw of value as DividendReceiptSnapshot[]) {
+    const event: Dividend = {
+      id: String(raw.event_id || '').trim(),
+      stockCode: String(raw.stock_code || '').trim().toUpperCase(),
+      stockName: String(raw.stock_name || '').trim(),
+      exDate: String(raw.ex_date || '').slice(0, 10),
+      paymentDate: String(raw.payment_date || '').slice(0, 10) || null,
+      cashPerShare: raw.cash_per_share === '' || raw.cash_per_share == null ? null : Number(raw.cash_per_share),
+      source: String(raw.source || '').trim(),
+      sourceUrl: String(raw.source_url || '').trim(),
+      updatedAt: String(raw.event_updated_at || '').trim()
+    };
+    const shares = Number(raw.entitled_shares);
+    const remittanceFee = Number(raw.remittance_fee);
+    const confirmedAt = String(raw.captured_at || '').slice(0, 10);
+    const cashFlowId = String(raw.cash_flow_id || '').trim();
+    if (confirmations[event.id]) throw new Error('雲端配息快照含有重複事件');
+    confirmations[event.id] = { event, shares, remittanceFee, confirmedAt, received: true, ...(cashFlowId ? { cashFlowId } : {}) };
+  }
+  return parseLedger({ version: 1, confirmations });
 }
 
 /** 保留賣出後的歷史確認紀錄；公告修正以新資料顯示，股數仍使用已確認快照。 */

@@ -1,4 +1,5 @@
-import { parseFeed, parseLedger, type Feed, type Ledger } from '../domain/dividends';
+import { estimateDividend, parseFeed, parseLedger, receiptSnapshotsToLedger, type Feed, type Ledger } from '../domain/dividends';
+import { effectiveRemittanceFee } from '../domain/entitlements';
 import { parseDividendGoalPlan, type DividendGoalPlan } from '../domain/dividendGoals';
 
 const cacheKey = 'stock_dashboard_dividend_feed_v1';
@@ -14,6 +15,27 @@ export function loadLedger(isDemo: boolean): Ledger {
 /** 先驗證再存檔；quota 或隱私模式失敗由畫面明確回報。 */
 export function saveLedger(isDemo: boolean, ledger: Ledger) {
   localStorage.setItem(ledgerKey(isDemo), JSON.stringify(parseLedger(ledger)));
+}
+
+/** 將正式模式的事件快照批次 upsert 到試算表；回傳伺服器實際落盤內容。 */
+export async function saveDividendReceiptSnapshots(apiUrl: string, ledger: Ledger): Promise<Ledger> {
+  const parsed = parseLedger(ledger);
+  const snapshots = Object.values(parsed.confirmations).filter(item => item.received && item.shares > 0 && item.event.paymentDate && item.event.cashPerShare !== null && item.event.cashPerShare > 0).map(item => {
+    const gross = estimateDividend(item.shares, item.event.cashPerShare) || 0;
+    return {
+      event_id: item.event.id, stock_code: item.event.stockCode, stock_name: item.event.stockName,
+      ex_date: item.event.exDate, payment_date: item.event.paymentDate, cash_per_share: item.event.cashPerShare,
+      entitled_shares: item.shares, gross_amount: gross,
+      remittance_fee: effectiveRemittanceFee(gross, item.remittanceFee), net_amount: gross - effectiveRemittanceFee(gross, item.remittanceFee),
+      cash_flow_id: item.cashFlowId || '', source: item.event.source, source_url: item.event.sourceUrl,
+      event_updated_at: item.event.updatedAt, captured_at: item.confirmedAt
+    };
+  });
+  const response = await fetch(apiUrl, { method: 'POST', body: JSON.stringify({ action: 'saveDividendReceiptSnapshots', snapshots }) });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const result = await response.json();
+  if (result.status !== 'success') throw new Error(result.message || '配息快照同步失敗');
+  return receiptSnapshotsToLedger(result.snapshots || snapshots);
 }
 
 /** 讀同站公告，網路或格式失敗時回退至驗證過的上一份快取。 */

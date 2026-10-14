@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { reloadData, state } from '../legacy/dashboard.js';
-import { estimateDividend, parseLedger, relevantEvents, taipeiToday, type Dividend, type Feed, type Holding, type Ledger } from '../domain/dividends';
-import { loadFeed, loadLedger, saveDividendGoals, saveLedger } from '../services/dividends';
-import { DEFAULT_REMITTANCE_FEE, eligibleShares, isDividendReceived, netDividend, resolvedShares, transactionStockCodes, type Transaction } from '../domain/entitlements';
+import { estimateDividend, parseLedger, receiptSnapshotsToLedger, relevantEvents, taipeiToday, type Dividend, type Feed, type Holding, type Ledger } from '../domain/dividends';
+import { loadFeed, loadLedger, saveDividendGoals, saveDividendReceiptSnapshots, saveLedger } from '../services/dividends';
+import { effectiveRemittanceFee, eligibleShares, isDividendReceived, netDividend, resolvedShares, transactionStockCodes, type Transaction } from '../domain/entitlements';
 import { estimateAnnualGoalCapital, latestCashBalance, parseDividendGoalPlan, projectDividendGoalMonths, projectDividendGoals, rankReinvestmentCandidates, type DividendGoalItem } from '../domain/dividendGoals';
 
 const feed = ref<Feed>({ version: 1, updatedAt: null, events: [], sources: [] });
@@ -17,6 +17,8 @@ const loading = ref(false);
 const warning = ref('');
 const error = ref('');
 const storageError = ref(false);
+const snapshotSyncing = ref(false);
+const cloudSnapshotIds = ref(new Set<string>());
 const goalSaving = ref(false);
 const goalMessage = ref('');
 const goalMonthly = ref(0);
@@ -69,8 +71,16 @@ function grossAmount(event: Dividend) {
   const c = ledger.value.confirmations[event.id];
   return estimateDividend(shareCount(event), c && isDividendReceived(event) ? c.event.cashPerShare : event.cashPerShare);
 }
-/** 淨額一律扣除固定匯費。 */
-function netAmount(event: Dividend) { return netDividend(grossAmount(event)); }
+/** 已入帳採快照匯費；未入帳預估匯費最多不超過當次配息。 */
+function feeAmount(event: Dividend) {
+  const gross = grossAmount(event);
+  if (gross === null) return null;
+  return effectiveRemittanceFee(gross, ledger.value.confirmations[event.id]?.remittanceFee);
+}
+function netAmount(event: Dividend) {
+  const gross = grossAmount(event);
+  return gross === null ? null : netDividend(gross, feeAmount(event) || 0);
+}
 /** 格式化台幣；未知值與零元分開顯示。 */
 function money(value: number | null) { return value === null ? '待確認' : `NT$ ${value.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
 /** 狀態同時反映交易資料、公告及入帳核對。 */
@@ -95,8 +105,25 @@ function syncPortfolio() {
   isDemo.value = state.isDemo;
   portfolioReady.value = true;
   storageError.value = false;
-  try { ledger.value = loadLedger(isDemo.value); }
-  catch { storageError.value = true; ledger.value = { version: 1, confirmations: {} }; error.value = '瀏覽器無法讀取歷史配息估算資料；不影響 ETF 目標與試算表庫存。請確認網站儲存空間未被封鎖。'; }
+  let cached: Ledger = { version: 1, confirmations: {} };
+  try { cached = loadLedger(isDemo.value); }
+  catch { error.value = '瀏覽器快取無法讀取；正式資料仍以試算表配息快照為準。'; }
+  if (isDemo.value) {
+    ledger.value = cached;
+    cloudSnapshotIds.value = new Set();
+    return;
+  }
+  try {
+    const cloud = receiptSnapshotsToLedger(state.dividendReceiptSnapshots || []);
+    cloudSnapshotIds.value = new Set(Object.keys(cloud.confirmations));
+    // 首次升級時保留舊瀏覽器快照；同事件以試算表版本為準，後續自動補傳缺少的事件。
+    ledger.value = parseLedger({ version: 1, confirmations: { ...cached.confirmations, ...cloud.confirmations } });
+    try { saveLedger(false, ledger.value); } catch { /* 正式資料已在試算表，瀏覽器快取失敗不阻擋。 */ }
+  } catch {
+    storageError.value = true;
+    ledger.value = cached;
+    error.value = '試算表中的配息快照格式不正確；已暫用此瀏覽器快取，請檢查 dividend_receipt_snapshots。';
+  }
 }
 
 /** 從雲端正式資料載入草稿；舊資料若曾被 Sheets 移除前導零，會用公告代號唯一比對修復。 */
@@ -157,28 +184,41 @@ async function refresh() {
   finally { loading.value = false; }
 }
 /** 寫入成功後才更新畫面，避免顯示實際未保存的股數。 */
-function persist(next: Ledger) {
-  saveLedger(isDemo.value, next);
-  ledger.value = next;
+async function persist(next: Ledger) {
+  if (isDemo.value) {
+    saveLedger(true, next);
+    ledger.value = next;
+    return;
+  }
+  const saved = await saveDividendReceiptSnapshots(state.apiUrl, next);
+  ledger.value = saved;
+  cloudSnapshotIds.value = new Set(Object.keys(saved.confirmations));
+  // localStorage 僅作離線快取；失敗不影響已寫入試算表的正式資料。
+  try { saveLedger(false, saved); } catch { /* 雲端已成功，不阻擋畫面。 */ }
 }
 /** 發放日到達時自動保存股數快照，並通知總覽重新計算已落袋股息。 */
-function syncAutomaticReceipts() {
-  if (!portfolioReady.value || storageError.value) return;
+async function syncAutomaticReceipts() {
+  if (!portfolioReady.value || storageError.value || snapshotSyncing.value) return;
   const next = parseLedger(JSON.parse(JSON.stringify(ledger.value)));
   let changed = false;
   for (const event of allEvents.value) {
     if (!isDividendReceived(event) || next.confirmations[event.id]?.received) continue;
     const entitlement = eligibleShares(transactions.value, event);
-    if (entitlement.error || entitlement.shares === null) continue;
-    next.confirmations[event.id] = { event: { ...event }, shares: entitlement.shares, confirmedAt: taipeiToday(), received: true, remittanceFee: DEFAULT_REMITTANCE_FEE };
+    const gross = entitlement.shares === null ? null : estimateDividend(entitlement.shares, event.cashPerShare);
+    // 沒有除息資格或配息為 0 時不建立事件快照，避免產生 0 元配息與 10 元匯費的矛盾資料。
+    if (entitlement.error || entitlement.shares === null || entitlement.shares <= 0 || gross === null || gross <= 0) continue;
+    next.confirmations[event.id] = { event: { ...event }, shares: entitlement.shares, confirmedAt: taipeiToday(), received: true, remittanceFee: effectiveRemittanceFee(gross) };
     changed = true;
   }
-  if (!changed) return;
-  try { persist(next); window.dispatchEvent(new Event('dividend-ledger-updated')); }
-  catch { storageError.value = true; error.value = '無法保存歷史配息估算資料；總覽仍會採用試算表中已登錄的股息現金流。'; }
+  const hasUnsyncedLegacy = !isDemo.value && Object.values(next.confirmations).some(item => item.received && item.shares > 0 && !cloudSnapshotIds.value.has(item.event.id));
+  if (!changed && !hasUnsyncedLegacy) return;
+  snapshotSyncing.value = true;
+  try { await persist(next); window.dispatchEvent(new Event('dividend-ledger-updated')); }
+  catch (e) { error.value = `無法同步配息快照到試算表：${(e as Error).message}`; }
+  finally { snapshotSyncing.value = false; }
 }
 
-watch([feed, transactions, portfolioReady], syncAutomaticReceipts, { deep: true });
+watch([feed, transactions, portfolioReady], () => { void syncAutomaticReceipts(); }, { deep: true });
 watch([feed, portfolioReady], () => loadSavedGoalPlan(), { deep: true });
 onMounted(() => { window.addEventListener('portfolio-updated', syncPortfolio); void refresh(); });
 onUnmounted(() => window.removeEventListener('portfolio-updated', syncPortfolio));
@@ -268,7 +308,7 @@ onUnmounted(() => window.removeEventListener('portfolio-updated', syncPortfolio)
             <tr v-for="event in visible" :key="event.id">
               <td><strong>{{ event.stockCode }}</strong><p class="text-slate-400 text-xs mt-1">{{ event.stockName }}</p><a :href="event.sourceUrl" target="_blank" rel="noopener noreferrer" class="text-xs text-indigo-400">{{ event.source }}</a><p class="text-xs text-slate-500">資料 {{ event.updatedAt.slice(0, 10) }}</p></td>
               <td>{{ event.exDate }}</td><td>{{ event.paymentDate || '未公告' }}</td><td>{{ event.cashPerShare === null ? '未公告' : event.cashPerShare.toLocaleString('zh-TW', { maximumFractionDigits: 8 }) }}</td>
-              <td><span v-if="shareCount(event) !== null">{{ shareCount(event)?.toLocaleString('zh-TW') }}</span><span v-else class="text-rose-300">無法計算</span></td><td>{{ money(grossAmount(event)) }}</td><td>{{ money(DEFAULT_REMITTANCE_FEE) }}</td><td class="font-mono text-indigo-200">{{ money(netAmount(event)) }}</td>
+              <td><span v-if="shareCount(event) !== null">{{ shareCount(event)?.toLocaleString('zh-TW') }}</span><span v-else class="text-rose-300">無法計算</span></td><td>{{ money(grossAmount(event)) }}</td><td>{{ money(feeAmount(event)) }}</td><td class="font-mono text-indigo-200">{{ money(netAmount(event)) }}</td>
               <td><span class="text-xs rounded-full bg-slate-800 px-2 py-1">{{ statusText(event) }}</span><p v-if="revised(event)" class="text-xs text-amber-300 mt-2">公告有修正，請重新核對</p></td>
             </tr>
             <tr v-if="!visible.length"><td colspan="9" class="!py-10 text-center text-slate-400">{{ loading ? '正在讀取公告…' : search ? '沒有符合搜尋條件的紀錄。' : '目前沒有此年度可顯示的配息公告。未查到資料不代表不配息。' }}</td></tr>

@@ -77,6 +77,7 @@ test('儲存 ETF 目標後自動建立 0 股 Demo 庫存', async ({ page }) => {
   await expect(page.getByTestId('monthly-goal-cards').locator('details[open]')).toHaveCount(12);
   await page.getByRole('button', { name: '再投入候選' }).click();
   await expect(page.getByTestId('reinvestment-candidates')).toContainText('0056');
+  await expect(page.getByText('無法保存歷史配息估算資料', { exact: false })).toHaveCount(0);
   await page.locator('#tab-btn-inventory').click();
   const row = page.locator('#inventory-table-body tr').filter({ hasText: '0056' });
   await expect(row).toBeVisible();
@@ -106,13 +107,14 @@ test('Sheets 持股與 Demo 快照分離，外部股票名稱不執行 HTML', as
     inventory: [{ stock_code: '2330', stock_name: '<img src=x onerror=alert(1)>', total_shares: 300, current_price: 100, market_value: 30000 }],
     investmentSettings: { monthly_passive_income_target: 1000 },
     dividendGoals: [{ stock_code: 56, stock_name: '元大高股息' }],
+    dividendReceiptSnapshots: [{ event_id: fixtureEvent.id, stock_code: fixtureEvent.stockCode, stock_name: fixtureEvent.stockName, ex_date: fixtureEvent.exDate, payment_date: fixtureEvent.paymentDate, cash_per_share: fixtureEvent.cashPerShare, entitled_shares: 300, remittance_fee: 10, cash_flow_id: 'F1', source: fixtureEvent.source, source_url: fixtureEvent.sourceUrl, event_updated_at: fixtureEvent.updatedAt, captured_at: '2026-07-09' }],
     portfolioSnapshots: [{ snapshot_date: '2026-09-17', total_assets: 30000, trailing_12m_dividends: 1200 }],
   } }));
   await page.goto('./#/inventory');
   await expect(page.locator('#quote-quality-panel')).toContainText('行情資料需留意');
   await expect(page.locator('#quote-quality-panel')).toContainText('缺少 price_date：2330');
-  await expect(page.locator('#card-monthly-passive-income')).toHaveText('$249.17');
-  await expect(page.locator('#passive-income-progress-text')).toHaveText('24.9%');
+  await expect(page.locator('#card-monthly-passive-income')).toHaveText('$100.00');
+  await expect(page.locator('#passive-income-progress-text')).toHaveText('10.0%');
   await page.locator('#tab-btn-dashboard').click();
   await expect(page.locator('#portfolioAssetSparkline')).toBeVisible();
   await expect(page.locator('#today-transactions-body tr').first().locator('td')).toHaveCount(3);

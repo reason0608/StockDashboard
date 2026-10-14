@@ -10,7 +10,14 @@ import { analyzeQuoteQuality } from '../domain/quoteQuality';
         // ⚙️ 統一雲端連線設定：在此處貼上您的 Google Apps Script Web App URL。
         // 當您將 index.html 分發給老婆或其他設備時，所有人打開皆能直接使用，完全不需再次設定！
         // =========================================================================
-        const DEFAULT_API_URL = ""; // 👈 填入您的 Web App 完整網址 (包含完整的 56 字元部署 ID)
+        const DEFAULT_API_URL = "";
+        const CURRENT_CENTRAL_API_URL = "https://script.google.com/macros/s/AKfycbxNSGI6PCaz043LUoDnW9McpCdnVzWvayuwz49bMGweOomTTkgLkGyCtQHAuVVcBfKR/exec";
+        const RETIRED_API_URLS = new Set([
+            "https://script.google.com/macros/s/AKfycbwTjUaPPQ6w_w09PAkKXotR3MdATumvNQTy2N-sc7xBYdN5ojT659NVXQYtlyXJa90Z/exec",
+            "https://script.google.com/macros/s/AKfycbwtMD0XBCH2Xg3Y1jMn4dE-i9lyqdRczY4bjyM3ziyaz1r6Y0kRcY-6-FKHY5jSTCFK/exec",
+            "https://script.google.com/macros/s/AKfycbz2IvgfoYZtAQZcBHEQZNGgC69GPr3513fk6-knn_71nPUtFq28PKa4AQLySX9NA07C/exec",
+            "https://script.google.com/macros/s/AKfycbwOEFPe2W8SfvVyOLqYSNUADGaaELoGx9qv-X2RTavQqoiTMrnOjw_xlLxGBqBirQ7A/exec"
+        ]);
 
         // --- 1. 初始化 Mock / 預設數據 (DEMO 模式使用) ---
         const DEFAULT_CASH_FLOW = [
@@ -39,6 +46,7 @@ import { analyzeQuoteQuality } from '../domain/quoteQuality';
             portfolioSnapshots: [],
             investmentSettings: {},
             dividendGoals: [],
+            dividendReceiptSnapshots: [],
             apiUrl: "",
             isDemo: true,
             lastError: "",
@@ -141,7 +149,9 @@ import { analyzeQuoteQuality } from '../domain/quoteQuality';
             bindSettingsValidation();
             loadAppsScriptPreview();
             window.addEventListener('dividend-ledger-updated', () => { renderDashboard(); renderInventoryTable(); });
-            // 優先讀取 LocalStorage 自訂覆蓋，若無則採用全域預設之 DEFAULT_API_URL
+            // 已知舊中央部署自動升級；其他自訂網址仍維持使用者設定。
+            const storedApiUrl = localStorage.getItem("sheet_api_url");
+            if (storedApiUrl && RETIRED_API_URLS.has(storedApiUrl)) localStorage.setItem("sheet_api_url", CURRENT_CENTRAL_API_URL);
             state.apiUrl = localStorage.getItem("sheet_api_url") || DEFAULT_API_URL;
             
             // 如果成功讀取到了程式碼中宣告的預設 API 網址，顯示提示綠條
@@ -194,6 +204,7 @@ import { analyzeQuoteQuality } from '../domain/quoteQuality';
                     state.portfolioSnapshots = [];
                     state.investmentSettings = { monthly_passive_income_target: Number(localStorage.getItem('demo_monthly_passive_income_target') || 0) };
                     state.dividendGoals = JSON.parse(localStorage.getItem('demo_dividend_goals') || '[]');
+                    state.dividendReceiptSnapshots = [];
                     calculateInventoryFromTransactions();
                     document.getElementById('connection-error-banner').classList.add('hidden');
                 } else {
@@ -218,6 +229,7 @@ import { analyzeQuoteQuality } from '../domain/quoteQuality';
                     state.portfolioSnapshots = Array.isArray(data.portfolioSnapshots) ? data.portfolioSnapshots : [];
                     state.investmentSettings = data.investmentSettings && typeof data.investmentSettings === 'object' ? data.investmentSettings : {};
                     state.dividendGoals = Array.isArray(data.dividendGoals) ? data.dividendGoals : [];
+                    state.dividendReceiptSnapshots = Array.isArray(data.dividendReceiptSnapshots) ? data.dividendReceiptSnapshots : [];
                     state.lastError = "";
                     state.lastSyncAt = new Date().toISOString();
 
@@ -247,6 +259,7 @@ import { analyzeQuoteQuality } from '../domain/quoteQuality';
                 state.portfolioSnapshots = [];
                 state.investmentSettings = { monthly_passive_income_target: Number(localStorage.getItem('demo_monthly_passive_income_target') || 0) };
                 state.dividendGoals = JSON.parse(localStorage.getItem('demo_dividend_goals') || '[]');
+                state.dividendReceiptSnapshots = [];
                 calculateInventoryFromTransactions();
                 
                 renderDashboard();
