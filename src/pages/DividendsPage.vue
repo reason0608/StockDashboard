@@ -224,7 +224,7 @@ onUnmounted(() => window.removeEventListener('portfolio-updated', syncPortfolio)
       <div v-if="goalView === 'overview'" class="space-y-4">
         <div data-testid="saved-goal-summary" class="rounded-lg border border-slate-800 bg-slate-950/50 p-3 text-sm text-slate-300"><span class="text-slate-400">目前已儲存：</span>年目標 {{ money(savedGoalMonthly * 12) }}・{{ savedGoalItems.length ? savedGoalItems.map(item => item.stockCode).join('、') : '尚未選擇 ETF' }}<span v-if="goalChanged" class="ml-2 text-amber-300">・有尚未儲存的變更</span></div>
         <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-3 items-end">
-          <label class="text-sm">希望每月平均配息<input v-model.number="goalMonthly" class="field mt-2 w-full" type="number" min="0" max="1000000000" step="100" aria-label="每月配息目標"><span class="hint !mt-1 block">年度目標自動為 {{ money(annualTarget) }}</span></label>
+          <label class="text-sm"><span class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1"><span>希望每月平均配息</span><span class="text-xs text-slate-400">年度目標自動為 {{ money(annualTarget) }}</span></span><input v-model.number="goalMonthly" class="field mt-2 w-full" type="number" min="0" max="1000000000" step="100" aria-label="每月配息目標"></label>
           <label class="text-sm">加入 ETF<input v-model="newGoalCode" class="field mt-2 w-full" list="etf-goal-options" placeholder="輸入代號，例如 0056" @keyup.enter="addGoalItem"><datalist id="etf-goal-options"><option v-for="item in etfOptions" :key="item.stockCode" :value="item.stockCode">{{ item.stockName }}</option></datalist></label>
           <button type="button" class="secondary" @click="addGoalItem">加入</button>
         </div>
