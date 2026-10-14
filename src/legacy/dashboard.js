@@ -680,8 +680,6 @@ import { analyzeQuoteQuality } from '../domain/quoteQuality';
             document.getElementById('passive-income-target').textContent = target > 0 ? `$${formatNumber(target)}` : '尚未設定';
             document.getElementById('passive-income-progress-text').textContent = target > 0 ? `${progress.toFixed(1)}%` : '尚未設定';
             document.getElementById('passive-income-progress-bar').style.width = `${Math.min(Math.max(progress, 0), 100)}%`;
-            const input = document.getElementById('settings-passive-income-target');
-            if (input && document.activeElement !== input) input.value = target > 0 ? String(target) : '';
         }
 
         /** 顯示試算表同步時間、報價日期與異常代號，避免將舊報價誤認為即時行情。 */
@@ -892,11 +890,6 @@ import { analyzeQuoteQuality } from '../domain/quoteQuality';
             const url = document.getElementById('settings-api-url').value.trim();
             const husbandInput = document.getElementById('settings-husband-name').value.trim();
             const wifeInput = document.getElementById('settings-wife-name').value.trim();
-            const target = Number(document.getElementById('settings-passive-income-target').value || 0);
-            if (!Number.isFinite(target) || target < 0 || target > 1000000000) {
-                showToast("被動收入目標必須是 0 到 10 億之間的數字。", "alert-triangle", "text-rose-400");
-                return;
-            }
 
             if (url) {
                 const validation = validateGasUrl(url);
@@ -910,22 +903,6 @@ import { analyzeQuoteQuality } from '../domain/quoteQuality';
             // 儲存姓名客製化設定
             localStorage.setItem("husband_name", husbandInput);
             localStorage.setItem("wife_name", wifeInput);
-            if (state.isDemo || !(url || state.apiUrl)) {
-                localStorage.setItem('demo_monthly_passive_income_target', String(target));
-            } else {
-                try {
-                    const response = await fetch(url || state.apiUrl, {
-                        method: 'POST',
-                        body: JSON.stringify({ action: 'saveSettings', settings: { monthly_passive_income_target: target } })
-                    });
-                    const result = await response.json();
-                    if (result.status !== 'success') throw new Error(result.message || '設定儲存失敗');
-                } catch (error) {
-                    showToast("被動收入目標無法寫入 investment_settings，請先更新並部署 Apps Script。", "alert-circle", "text-red-400");
-                    return;
-                }
-            }
-
             showToast("所有設定已儲存！即將自動刷新...", "check-circle", "text-emerald-400");
             setTimeout(() => {
                 window.location.reload();

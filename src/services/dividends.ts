@@ -33,9 +33,10 @@ export async function loadFeed(): Promise<{ feed: Feed; warning: string }> {
 }
 
 /** 將目標與 0 庫存占位列交由同一 Apps Script 請求處理，避免部分成功。 */
-export async function saveDividendGoals(apiUrl: string, plan: DividendGoalPlan): Promise<void> {
+export async function saveDividendGoals(apiUrl: string, plan: DividendGoalPlan): Promise<DividendGoalPlan> {
   const response = await fetch(apiUrl, { method: 'POST', body: JSON.stringify({ action: 'saveDividendGoals', plan: parseDividendGoalPlan(plan) }) });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const result = await response.json();
   if (result.status !== 'success') throw new Error(result.message || 'ETF 目標儲存失敗');
+  return parseDividendGoalPlan(result.plan ?? plan);
 }

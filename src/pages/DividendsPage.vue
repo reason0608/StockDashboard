@@ -20,6 +20,9 @@ const goalSaving = ref(false);
 const goalMessage = ref('');
 const goalMonthly = ref(0);
 const goalItems = ref<DividendGoalItem[]>([]);
+const savedGoalMonthly = ref(0);
+const savedGoalItems = ref<DividendGoalItem[]>([]);
+const goalLoaded = ref(false);
 const newGoalCode = ref('');
 const search = ref('');
 const year = ref(taipeiToday().slice(0, 4));
@@ -48,6 +51,7 @@ const goalPlan = computed(() => parseDividendGoalPlan({ monthlyTarget: goalMonth
 const goalProjection = computed(() => projectDividendGoals(goalPlan.value, feed.value.events, holdings.value, taipeiToday()));
 const projectedMonthlyIncome = computed(() => goalProjection.value.reduce((sum, item) => sum + item.projectedAnnualIncome, 0) / 12);
 const goalProgress = computed(() => goalMonthly.value > 0 ? Math.min(100, projectedMonthlyIncome.value / goalMonthly.value * 100) : 0);
+const goalChanged = computed(() => JSON.stringify(goalPlan.value) !== JSON.stringify({ monthlyTarget: savedGoalMonthly.value, items: savedGoalItems.value }));
 
 /** 依每日交易紀錄自動計算除息日前持股；已入帳後保留當時快照。 */
 function shareCount(event: Dividend) { return resolvedShares(event, transactions.value, ledger.value.confirmations[event.id]); }
@@ -78,13 +82,28 @@ function revised(event: Dividend) {
 function syncPortfolio() {
   holdings.value = state.inventory.map((h: Holding) => ({ stock_code: String(h.stock_code).trim(), stock_name: String(h.stock_name || ''), total_shares: Number(h.total_shares), current_price: h.current_price }));
   transactions.value = state.transactions.map((t: Transaction) => ({ ...t, stock_code: String(t.stock_code).trim() }));
-  goalMonthly.value = Number((state.investmentSettings as Record<string, unknown>)?.monthly_passive_income_target || 0);
-  goalItems.value = (state.dividendGoals || []).map((item: Record<string, unknown>) => ({ stockCode: String(item.stock_code || item.stockCode || ''), stockName: String(item.stock_name || item.stockName || '') }));
   isDemo.value = state.isDemo;
   portfolioReady.value = true;
   storageError.value = false;
   try { ledger.value = loadLedger(isDemo.value); }
-  catch { storageError.value = true; ledger.value = { version: 1, confirmations: {} }; error.value = '瀏覽器內的自動入帳快照無法讀取，已停止寫入以保護原資料。請確認網站儲存空間未被封鎖。'; }
+  catch { storageError.value = true; ledger.value = { version: 1, confirmations: {} }; error.value = '瀏覽器無法讀取歷史配息估算資料；不影響 ETF 目標與試算表庫存。請確認網站儲存空間未被封鎖。'; }
+}
+
+/** 從雲端正式資料載入草稿；舊資料若曾被 Sheets 移除前導零，會用公告代號唯一比對修復。 */
+function loadSavedGoalPlan(force = false) {
+  if ((!portfolioReady.value || !etfOptions.value.length) || (goalLoaded.value && !force)) return;
+  const items = (state.dividendGoals || []).map((item: Record<string, unknown>) => {
+    const raw = String(item.stock_code || item.stockCode || '').trim().toUpperCase();
+    const matches = etfOptions.value.filter(option => option.stockCode.replace(/^0+/, '') === raw.replace(/^0+/, ''));
+    const option = etfOptions.value.find(candidate => candidate.stockCode === raw) || (matches.length === 1 ? matches[0] : undefined);
+    return { stockCode: option?.stockCode || raw, stockName: option?.stockName || String(item.stock_name || item.stockName || '') };
+  });
+  const plan = parseDividendGoalPlan({ monthlyTarget: Number((state.investmentSettings as Record<string, unknown>)?.monthly_passive_income_target || 0), items });
+  savedGoalMonthly.value = plan.monthlyTarget;
+  savedGoalItems.value = plan.items.map(item => ({ ...item }));
+  goalMonthly.value = plan.monthlyTarget;
+  goalItems.value = plan.items.map(item => ({ ...item }));
+  goalLoaded.value = true;
 }
 
 /** 從公告清單加入 ETF；實際股數保持為零直到新增交易。 */
@@ -107,9 +126,12 @@ async function persistGoalPlan() {
       localStorage.setItem('demo_monthly_passive_income_target', String(plan.monthlyTarget));
       localStorage.setItem('demo_dividend_goals', JSON.stringify(plan.items));
     } else {
-      await saveDividendGoals(state.apiUrl, plan);
+      const saved = await saveDividendGoals(state.apiUrl, plan);
+      savedGoalMonthly.value = saved.monthlyTarget;
+      savedGoalItems.value = saved.items.map(item => ({ ...item }));
     }
     await reloadData();
+    loadSavedGoalPlan(true);
     goalMessage.value = '投資目標已儲存，庫存清單已同步。';
   } catch (e) { goalMessage.value = (e as Error).message; }
   finally { goalSaving.value = false; }
@@ -141,10 +163,11 @@ function syncAutomaticReceipts() {
   }
   if (!changed) return;
   try { persist(next); window.dispatchEvent(new Event('dividend-ledger-updated')); }
-  catch { storageError.value = true; error.value = '無法保存自動入帳快照，總覽可能暫時無法計入這些股息。'; }
+  catch { storageError.value = true; error.value = '無法保存歷史配息估算資料；總覽仍會採用試算表中已登錄的股息現金流。'; }
 }
 
 watch([feed, transactions, portfolioReady], syncAutomaticReceipts, { deep: true });
+watch([feed, portfolioReady], () => loadSavedGoalPlan(), { deep: true });
 onMounted(() => { window.addEventListener('portfolio-updated', syncPortfolio); void refresh(); });
 onUnmounted(() => window.removeEventListener('portfolio-updated', syncPortfolio));
 </script>
@@ -172,6 +195,10 @@ onUnmounted(() => window.removeEventListener('portfolio-updated', syncPortfolio)
         <div><h3 class="font-semibold">ETF 配息投資目標</h3><p class="hint">儲存 ETF 後會自動加入庫存，初始股數為 0；實際持股只由購買／賣出紀錄更新。</p></div>
         <div class="text-right"><p class="text-xs text-slate-400">目前達成</p><p class="text-2xl font-bold text-indigo-300">{{ goalProgress.toFixed(1) }}%</p></div>
       </div>
+      <div data-testid="saved-goal-summary" class="rounded-lg border border-slate-800 bg-slate-950/50 p-3 text-sm text-slate-300">
+        <span class="text-slate-400">目前已儲存：</span>每月 {{ money(savedGoalMonthly) }}・{{ savedGoalItems.length ? savedGoalItems.map(item => item.stockCode).join('、') : '尚未選擇 ETF' }}
+        <span v-if="goalChanged" class="ml-2 text-amber-300">・有尚未儲存的變更</span>
+      </div>
       <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-3 items-end">
         <label class="text-sm">希望每月平均配息<input v-model.number="goalMonthly" class="field mt-2 w-full" type="number" min="0" max="1000000000" step="100" aria-label="每月配息目標"></label>
         <label class="text-sm">加入 ETF<input v-model="newGoalCode" class="field mt-2 w-full" list="etf-goal-options" placeholder="輸入代號，例如 0056" @keyup.enter="addGoalItem"><datalist id="etf-goal-options"><option v-for="item in etfOptions" :key="item.stockCode" :value="item.stockCode">{{ item.stockName }}</option></datalist></label>
@@ -179,7 +206,7 @@ onUnmounted(() => window.removeEventListener('portfolio-updated', syncPortfolio)
       </div>
       <div v-if="goalItems.length" class="overflow-x-auto border border-slate-800 rounded-lg">
         <table class="w-full text-sm text-left whitespace-nowrap">
-          <thead class="bg-slate-950/50 text-slate-400"><tr><th>ETF</th><th>目前股數</th><th>近 12 月每股配息</th><th>預估月均配息</th><th>尚需股數</th><th>預估所需資金</th><th></th></tr></thead>
+          <thead class="bg-slate-950/50 text-slate-400"><tr><th>ETF</th><th>目前股數</th><th>近 12 月每股配息</th><th>預估月均配息</th><th>尚需股數</th><th>尚需資金（約）</th><th></th></tr></thead>
           <tbody class="divide-y divide-slate-800"><tr v-for="item in goalProjection" :key="item.stockCode"><td><strong>{{ item.stockCode }}</strong><p class="text-xs text-slate-400">{{ item.stockName }}</p></td><td>{{ item.shares.toLocaleString('zh-TW') }}</td><td>{{ item.annualDividendPerShare ? item.annualDividendPerShare.toLocaleString('zh-TW') : '資料不足' }}</td><td>{{ money(item.projectedAnnualIncome / 12) }}</td><td>{{ item.requiredShares === null ? '待配息資料' : item.requiredShares.toLocaleString('zh-TW') }}</td><td>{{ item.requiredCapital === null ? '待股價資料' : money(item.requiredCapital) }}</td><td><button type="button" class="text-rose-300 hover:text-rose-200" @click="removeGoalItem(item.stockCode)">移除</button></td></tr></tbody>
         </table>
       </div>
@@ -202,7 +229,7 @@ onUnmounted(() => window.removeEventListener('portfolio-updated', syncPortfolio)
     <div class="panel !p-0 overflow-hidden">
       <div class="p-5 flex flex-wrap items-center justify-between gap-3"><h3 class="font-semibold">我的配息紀錄</h3><input v-model="search" class="field" type="search" aria-label="搜尋配息股票" placeholder="搜尋股票代號或名稱"></div>
       <div class="overflow-x-auto">
-        <table class="w-full text-sm text-left whitespace-nowrap">
+        <table data-testid="dividend-records" class="w-full text-sm text-left whitespace-nowrap">
           <thead class="bg-slate-950/50 text-slate-400"><tr><th>股票</th><th>除息日</th><th>發放日</th><th>每股／單位</th><th>自動股數</th><th>稅前總額</th><th>匯費</th><th>預估淨額</th><th>狀態</th></tr></thead>
           <tbody class="divide-y divide-slate-800">
             <tr v-for="event in visible" :key="event.id">
@@ -221,6 +248,7 @@ onUnmounted(() => window.removeEventListener('portfolio-updated', syncPortfolio)
       <p :class="stale ? 'text-amber-300' : ''">公告快照：{{ feed.updatedAt ? new Date(feed.updatedAt).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' }) : '尚未更新' }}（台北時間）{{ stale ? '・資料可能已過期' : '' }}</p>
       <p v-for="source in feed.sources" :key="source.name" :class="source.error ? 'text-amber-300' : ''">{{ source.name }}：{{ source.updatedAt ? new Date(source.updatedAt).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' }) : '尚未成功' }}{{ source.error ? `・${source.error}` : '' }}</p>
       <p>股數直接依每日交易紀錄推算；每筆匯費固定為 NT$10。每次重新整理頁面都會自動讀取最新公告，並在發放日到達後保存入帳快照。</p>
+      <p>歷史配息估算資料保存在目前瀏覽器，用來保留發放當時的公告與股數；實際帳務仍以試算表現金流為準，儲存失敗不影響 ETF 目標或庫存。</p>
     </div>
   </div>
 </template>

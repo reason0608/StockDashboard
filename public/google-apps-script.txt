@@ -39,7 +39,7 @@ function doPost(e) {
     }
     if (params.action === 'saveDividendGoals') {
       saveDividendGoals_(ss, params.plan || {});
-      return json_({ status: 'success' });
+      return json_({ status: 'success', plan: getDividendGoalPlan_(ss) });
     }
     if (ALLOWED_APPEND_SHEETS.indexOf(params.targetSheet) === -1) {
       return json_({ status: 'error', message: '不允許寫入此工作表' });
@@ -183,13 +183,27 @@ function saveDividendGoals_(ss, plan) {
     old.forEach(function(row) { created[String(row.stock_code)] = row.created_at; });
     if (sheet.getLastRow() > 1) sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).clearContent();
     var now = Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd HH:mm:ss');
-    if (items.length) sheet.getRange(2, 1, items.length, DIVIDEND_GOAL_HEADERS.length).setValues(items.map(function(item) {
-      return [item.stockCode, item.stockName, created[item.stockCode] || now, now];
-    }));
+    if (items.length) {
+      var goalRange = sheet.getRange(2, 1, items.length, DIVIDEND_GOAL_HEADERS.length);
+      goalRange.setValues(items.map(function(item) { return [item.stockCode, item.stockName, created[item.stockCode] || now, now]; }));
+      sheet.getRange(2, 1, items.length, 1).setNumberFormat('@');
+      sheet.getRange(2, 1, items.length, 1).setValues(items.map(function(item) { return [item.stockCode]; }));
+    }
     items.forEach(function(item) { upsertInventoryPlaceholder_(ss, item); });
   } finally {
     lock.releaseLock();
   }
+}
+
+/** 回傳剛寫入的正式資料，讓前端顯示的不是尚未落盤的草稿。 */
+function getDividendGoalPlan_(ss) {
+  var settings = getSettings_(ss);
+  return {
+    monthlyTarget: number_(settings.monthly_passive_income_target),
+    items: getSheetData_(ss.getSheetByName('dividend_goals')).map(function(row) {
+      return { stockCode: String(row.stock_code || ''), stockName: String(row.stock_name || '') };
+    })
+  };
 }
 
 /** 依現有標題名稱寫入；同代號已存在時完全不覆寫實際庫存與公式。 */
@@ -208,9 +222,10 @@ function upsertInventoryPlaceholder_(ss, item) {
     if (['total_shares', 'avg_cost', 'total_investment', 'current_price', 'market_value', 'unrealized_pnl', 'roi'].indexOf(header) >= 0) return 0;
     return '';
   });
-  sheet.appendRow(row);
+  var targetRow = sheet.getLastRow() + 1;
+  sheet.getRange(targetRow, 1, 1, row.length).setValues([row]);
+  sheet.getRange(targetRow, codeIndex + 1).setNumberFormat('@').setValue(item.stockCode);
   // 若既有庫存列使用公式取得即時股價、交易彙總或市值，沿用相同 R1C1 公式並自動調整列號。
-  var targetRow = sheet.getLastRow();
   if (targetRow > 2) {
     var formulas = sheet.getRange(targetRow - 1, 1, 1, headers.length).getFormulasR1C1()[0];
     formulas.forEach(function(formula, index) {

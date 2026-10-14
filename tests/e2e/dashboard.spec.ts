@@ -69,6 +69,7 @@ test('儲存 ETF 目標後自動建立 0 股 Demo 庫存', async ({ page }) => {
   await page.getByRole('button', { name: '加入', exact: true }).click();
   await page.getByRole('button', { name: '儲存投資目標' }).click();
   await expect(page.getByText('投資目標已儲存，庫存清單已同步。')).toBeVisible();
+  await expect(page.getByTestId('saved-goal-summary')).toContainText('0056');
   await page.locator('#tab-btn-inventory').click();
   const row = page.locator('#inventory-table-body tr').filter({ hasText: '0056' });
   await expect(row).toBeVisible();
@@ -97,6 +98,7 @@ test('Sheets 持股與 Demo 快照分離，外部股票名稱不執行 HTML', as
     ],
     inventory: [{ stock_code: '2330', stock_name: '<img src=x onerror=alert(1)>', total_shares: 300, current_price: 100, market_value: 30000 }],
     investmentSettings: { monthly_passive_income_target: 1000 },
+    dividendGoals: [{ stock_code: 56, stock_name: '元大高股息' }],
     portfolioSnapshots: [{ snapshot_date: '2026-09-17', total_assets: 30000, trailing_12m_dividends: 1200 }],
   } }));
   await page.goto('./#/inventory');
@@ -117,8 +119,15 @@ test('Sheets 持股與 Demo 快照分離，外部股票名稱不執行 HTML', as
   await expect(page.locator('#inventory-table-body img')).toHaveCount(0);
   await page.locator('#tab-btn-dividends').click();
   await expect(page.getByText('目前為 Demo 持股。', { exact: false })).not.toBeVisible();
-  await expect(page.locator('.dividends tbody')).toContainText('300');
-  await expect(page.locator('.dividends tbody')).toContainText('已入帳');
+  await expect(page.getByTestId('dividend-records')).toContainText('300');
+  await expect(page.getByTestId('saved-goal-summary')).toContainText('0056');
+  await expect(page.getByTestId('dividend-records')).toContainText('已入帳');
   expect(await page.evaluate(() => !!localStorage.getItem('stock_dashboard_dividends_v1_personal'))).toBe(true);
   expect(await page.evaluate(() => localStorage.getItem('stock_dashboard_dividends_v1_demo'))).toBeNull();
+});
+
+test('系統設定不再重複顯示每月被動收入目標', async ({ page }) => {
+  await page.goto('./#/settings');
+  await expect(page.locator('#settings-passive-income-target')).toHaveCount(0);
+  await expect(page.getByText('共同每月被動收入目標')).toHaveCount(0);
 });
