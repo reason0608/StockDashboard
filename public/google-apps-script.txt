@@ -17,6 +17,11 @@ var SNAPSHOT_HEADERS = [
   'dividends_received_today', 'trailing_12m_dividends', 'holdings_count',
   'oldest_price_date', 'newest_price_date', 'quote_status', 'invalid_quote_codes'
 ];
+var DIVIDEND_RECEIPT_HEADERS = [
+  'event_id', 'stock_code', 'stock_name', 'ex_date', 'payment_date', 'cash_per_share',
+  'entitled_shares', 'gross_amount', 'remittance_fee', 'net_amount', 'cash_flow_id',
+  'source', 'source_url', 'event_updated_at', 'captured_at', 'updated_at'
+];
 
 /** 回傳 Dashboard 所需的帳務、快照與共同設定。 */
 function doGet() {
@@ -27,7 +32,8 @@ function doGet() {
     inventory: getSheetData_(ss.getSheetByName('stock_inventory')),
     portfolioSnapshots: getSheetData_(ss.getSheetByName('portfolio_daily_snapshots')),
     investmentSettings: getSettings_(ss),
-    dividendGoals: getDividendGoalsFromInventory_(ss)
+    dividendGoals: getDividendGoalsFromInventory_(ss),
+    dividendReceiptSnapshots: getSheetData_(ss.getSheetByName('dividend_receipt_snapshots'))
   };
   return json_(result);
 }
@@ -44,6 +50,10 @@ function doPost(e) {
     if (params.action === 'saveDividendGoals') {
       saveDividendGoals_(ss, params.plan || {});
       return json_({ status: 'success', plan: getDividendGoalPlan_(ss) });
+    }
+    if (params.action === 'saveDividendReceiptSnapshots') {
+      saveDividendReceiptSnapshots_(ss, params.snapshots || []);
+      return json_({ status: 'success', snapshots: getSheetData_(ss.getSheetByName('dividend_receipt_snapshots')) });
     }
     if (ALLOWED_APPEND_SHEETS.indexOf(params.targetSheet) === -1) {
       return json_({ status: 'error', message: '不允許寫入此工作表' });
@@ -63,6 +73,7 @@ function setupStockDashboard() {
   PropertiesService.getScriptProperties().setProperty('SPREADSHEET_ID', ss.getId());
   ensureSheet_(ss, 'investment_settings', ['setting_key', 'setting_value']);
   ensureSheet_(ss, 'portfolio_daily_snapshots', SNAPSHOT_HEADERS);
+  ensureSheet_(ss, 'dividend_receipt_snapshots', DIVIDEND_RECEIPT_HEADERS);
   ScriptApp.getProjectTriggers().forEach(function(trigger) {
     if (trigger.getHandlerFunction() === 'capturePortfolioDailySnapshot') ScriptApp.deleteTrigger(trigger);
   });
@@ -314,6 +325,60 @@ function applyInventoryFormulas_(sheet, targetRow, headers, templates) {
     var cell = sheet.getRange(targetRow, column);
     if (!cell.getFormulaR1C1()) cell.setFormulaR1C1(templates[header]);
   });
+}
+
+/**
+ * 依 event_id 新增或更新配息事件快照；0 股與 0 元事件不落盤。
+ * 金額由伺服器依股數與每股配息重算，避免前端送入彼此矛盾的欄位。
+ */
+function saveDividendReceiptSnapshots_(ss, snapshots) {
+  if (!Array.isArray(snapshots) || snapshots.length > 2000) throw new Error('配息快照格式或筆數不正確');
+  var sheet = ensureSheet_(ss, 'dividend_receipt_snapshots', DIVIDEND_RECEIPT_HEADERS);
+  var now = Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd HH:mm:ss');
+  var rows = snapshots.map(function(item) {
+    var code = String(item.stock_code || '').trim().toUpperCase();
+    var exDate = String(item.ex_date || '').slice(0, 10);
+    var paymentDate = String(item.payment_date || '').slice(0, 10);
+    var eventId = String(item.event_id || '').trim();
+    var shares = Number(item.entitled_shares);
+    var cashPerShare = Number(item.cash_per_share);
+    var requestedFee = Number(item.remittance_fee);
+    var sourceUrl = String(item.source_url || '').trim();
+    if (!/^[0-9A-Z]{4,10}$/.test(code) || !/^\d{4}-\d{2}-\d{2}$/.test(exDate)
+      || !/^\d{4}-\d{2}-\d{2}$/.test(paymentDate) || paymentDate < exDate || eventId !== code + ':' + exDate) throw new Error('配息快照識別或日期不正確');
+    if (!isFinite(shares) || shares <= 0 || Math.floor(shares) !== shares || !isFinite(cashPerShare) || cashPerShare <= 0) throw new Error('配息快照股數或金額不正確');
+    if (!/^https:\/\//.test(sourceUrl)) throw new Error('配息快照來源網址不正確');
+    var gross = Math.round(shares * cashPerShare * 100) / 100;
+    var fee = isFinite(requestedFee) ? Math.max(0, Math.min(gross, Math.round(requestedFee * 100) / 100)) : Math.min(10, gross);
+    var net = Math.round((gross - fee) * 100) / 100;
+    return [
+      eventId, code, String(item.stock_name || '').trim().slice(0, 200), exDate, paymentDate,
+      cashPerShare, shares, gross, fee, net, String(item.cash_flow_id || '').trim().slice(0, 200),
+      String(item.source || '').trim().slice(0, 200), sourceUrl,
+      String(item.event_updated_at || '').trim(), String(item.captured_at || '').trim() || date_(new Date()), now
+    ];
+  });
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var values = sheet.getDataRange().getValues();
+    var rowById = {};
+    for (var i = 1; i < values.length; i++) if (values[i][0]) rowById[String(values[i][0])] = i + 1;
+    rows.forEach(function(row) {
+      var targetRow = rowById[row[0]];
+      if (targetRow) {
+        var originalCapturedAt = String(sheet.getRange(targetRow, 15).getValue() || '').trim();
+        if (originalCapturedAt) row[14] = originalCapturedAt;
+      } else {
+        targetRow = sheet.getLastRow() + 1;
+        rowById[row[0]] = targetRow;
+      }
+      sheet.getRange(targetRow, 1, 1, 2).setNumberFormat('@');
+      sheet.getRange(targetRow, 1, 1, row.length).setValues([row]);
+    });
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function upsertSetting_(sheet, key, value) {
