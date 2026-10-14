@@ -6,6 +6,10 @@
  */
 var ALLOWED_APPEND_SHEETS = ['users_cash_flow', 'daily_transactions'];
 var INVENTORY_GOAL_HEADER = 'is_dividend_goal';
+var INVENTORY_FORMULA_HEADERS = [
+  'total_shares', 'avg_cost', 'current_price', 'market_value',
+  'unrealized_pnl', 'roi', 'price_date'
+];
 var SNAPSHOT_HEADERS = [
   'snapshot_date', 'captured_at', 'cash_balance', 'stock_market_value', 'total_assets',
   'total_cost_basis', 'unrealized_pnl', 'total_contributed', 'husband_contributed',
@@ -234,6 +238,8 @@ function saveGoalsToInventory_(ss, items) {
     sheet.getRange(1, goalIndex + 1).setValue(INVENTORY_GOAL_HEADER);
     headers.push(INVENTORY_GOAL_HEADER);
   }
+  // 先驗證七個必要欄位在既有庫存中都有公式模板，避免清理到一半才發現無法補公式。
+  var formulaTemplates = getInventoryFormulaTemplates_(sheet, headers);
   var selected = {};
   items.forEach(function(item) { selected[stockKey_(item.stockCode)] = item; });
   var lastRow = Math.max(sheet.getLastRow(), 1);
@@ -275,17 +281,38 @@ function saveGoalsToInventory_(ss, items) {
       sheet.getRange(sourceRow, 1, 1, headers.length).clearContent();
       offset = targetRow - 2;
     }
-    var formulas = sheet.getRange(targetRow, 1, 1, headers.length).getFormulasR1C1()[0];
-    if (offset < 0 && targetRow > 2) {
-      var templateFormulas = sheet.getRange(targetRow - 1, 1, 1, headers.length).getFormulasR1C1()[0];
-      templateFormulas.forEach(function(formula, index) {
-        if (formula && !formulas[index] && index !== codeIndex && index !== nameIndex && index !== goalIndex) sheet.getRange(targetRow, index + 1).setFormulaR1C1(formula);
-      });
-    }
     sheet.getRange(targetRow, codeIndex + 1).setNumberFormat('@').setValue(item.stockCode);
     sheet.getRange(targetRow, nameIndex + 1).setValue(item.stockName);
     sheet.getRange(targetRow, goalIndex + 1).setValue(true);
-    if (offset < 0 && !sheet.getRange(targetRow, sharesIndex + 1).getFormula()) sheet.getRange(targetRow, sharesIndex + 1).setValue(0);
+    applyInventoryFormulas_(sheet, targetRow, headers, formulaTemplates);
+  });
+}
+
+/** 從任一既有庫存列取得七個必要欄位的 R1C1 公式；R1C1 可安全套用到不同列。 */
+function getInventoryFormulaTemplates_(sheet, headers) {
+  var missingHeaders = INVENTORY_FORMULA_HEADERS.filter(function(header) { return headers.indexOf(header) < 0; });
+  if (missingHeaders.length) throw new Error('stock_inventory 缺少欄位：' + missingHeaders.join(', '));
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) throw new Error('stock_inventory 尚無可供複製的公式列');
+  var formulas = sheet.getRange(2, 1, lastRow - 1, headers.length).getFormulasR1C1();
+  var templates = {};
+  INVENTORY_FORMULA_HEADERS.forEach(function(header) {
+    var index = headers.indexOf(header);
+    for (var row = 0; row < formulas.length; row++) {
+      if (formulas[row][index]) { templates[header] = formulas[row][index]; break; }
+    }
+  });
+  var missingFormulas = INVENTORY_FORMULA_HEADERS.filter(function(header) { return !templates[header]; });
+  if (missingFormulas.length) throw new Error('stock_inventory 找不到公式模板：' + missingFormulas.join(', '));
+  return templates;
+}
+
+/** 僅補上缺少的公式，不覆寫既有列已存在的個別公式。 */
+function applyInventoryFormulas_(sheet, targetRow, headers, templates) {
+  INVENTORY_FORMULA_HEADERS.forEach(function(header) {
+    var column = headers.indexOf(header) + 1;
+    var cell = sheet.getRange(targetRow, column);
+    if (!cell.getFormulaR1C1()) cell.setFormulaR1C1(templates[header]);
   });
 }
 

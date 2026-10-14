@@ -39,7 +39,7 @@ TypeScript 使用 5.9，避免 Vue 型別檢查工具尚未相容 TypeScript 7 �
 - 配息股數直接由每日交易紀錄推算；自動入帳快照只存於當前瀏覽器。原有帳務仍照現有 Sheets 方式同步。
 - 持股頁顯示行情資料狀態、網頁同步時間、報價日期範圍、無效價格及可能過期的股票。若 `stock_inventory` 提供 `price_date`（`yyyy-MM-dd`）欄位，可檢查報價新鮮度；未提供時會提示但不影響既有功能。
 - 總覽顯示近 12 個月平均每月被動收入、共同目標與達成率；目標由設定頁保存至 `investment_settings`，夫妻裝置共用。
-- 配息頁直接將 ETF 投資目標保存於 `stock_inventory.is_dividend_goal`，月配息金額存於 `investment_settings`，不再需要獨立的 `dividend_goals` 工作表。未持有 ETF 使用 0 股占位；儲存時會合併舊版造成的重複 0 股列、修正前導零，並優先使用第一個空白庫存列。若庫存上一列含 IMPORTXML 行情或交易彙總公式，新列會沿用相同公式，實際股數仍由交易紀錄決定。
+- 配息頁直接將 ETF 投資目標保存於 `stock_inventory.is_dividend_goal`，月配息金額存於 `investment_settings`，不再需要獨立的 `dividend_goals` 工作表。未持有 ETF 使用 0 股占位；儲存時會合併舊版造成的重複 0 股列、修正前導零，並優先使用第一個空白庫存列。新列會從既有庫存公式模板補齊 `total_shares`、`avg_cost`、`current_price`、`market_value`、`unrealized_pnl`、`roi`、`price_date`；任一公式模板缺失時會停止儲存並指出欄位，實際股數仍由交易紀錄決定。
 - 總覽的雙軸歷史曲線讀取 `portfolio_daily_snapshots`，同時呈現總資產與近 12 月平均月股息。
 
 ### 庫存報價日期
