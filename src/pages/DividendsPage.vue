@@ -4,12 +4,13 @@ import { reloadData, state } from '../legacy/dashboard.js';
 import { estimateDividend, parseLedger, relevantEvents, taipeiToday, type Dividend, type Feed, type Holding, type Ledger } from '../domain/dividends';
 import { loadFeed, loadLedger, saveDividendGoals, saveLedger } from '../services/dividends';
 import { DEFAULT_REMITTANCE_FEE, eligibleShares, isDividendReceived, netDividend, resolvedShares, transactionStockCodes, type Transaction } from '../domain/entitlements';
-import { parseDividendGoalPlan, projectDividendGoalMonths, projectDividendGoals, type DividendGoalItem } from '../domain/dividendGoals';
+import { estimateAnnualGoalCapital, latestCashBalance, parseDividendGoalPlan, projectDividendGoalMonths, projectDividendGoals, rankReinvestmentCandidates, type DividendGoalItem } from '../domain/dividendGoals';
 
 const feed = ref<Feed>({ version: 1, updatedAt: null, events: [], sources: [] });
 const ledger = ref<Ledger>({ version: 1, confirmations: {} });
 const holdings = ref<Holding[]>([]);
 const transactions = ref<Transaction[]>([]);
+const cashFlows = ref<Record<string, unknown>[]>([]);
 const isDemo = ref(true);
 const portfolioReady = ref(false);
 const loading = ref(false);
@@ -26,6 +27,12 @@ const goalLoaded = ref(false);
 const newGoalCode = ref('');
 const search = ref('');
 const year = ref(taipeiToday().slice(0, 4));
+const goalView = ref<'overview' | 'months' | 'candidates'>('overview');
+const goalTabs = [
+  { id: 'overview' as const, label: '目標與ETF' },
+  { id: 'months' as const, label: '12個月分布' },
+  { id: 'candidates' as const, label: '再投入候選' }
+];
 const allEvents = computed(() => relevantEvents(feed.value, holdings.value, ledger.value, transactionStockCodes(transactions.value)));
 const years = computed(() => [...new Set([taipeiToday().slice(0, 4), ...allEvents.value.map(e => (e.paymentDate || e.exDate).slice(0, 4))])].sort().reverse());
 const annual = computed(() => allEvents.value.filter(e => (e.paymentDate || e.exDate).startsWith(year.value)));
@@ -36,12 +43,6 @@ const pendingCount = computed(() => annual.value.filter(e => netAmount(e) === nu
 const awaiting = computed(() => annual.value.reduce((sum, e) => sum + (isDividendReceived(e) ? 0 : netAmount(e) ?? 0), 0));
 const received = computed(() => annual.value.reduce((sum, e) => sum + (isDividendReceived(e) ? netAmount(e) ?? 0 : 0), 0));
 const undated = computed(() => annual.value.filter(e => !e.paymentDate).length);
-const monthly = computed(() => Array.from({ length: 12 }, (_, i) => {
-  const prefix = `${year.value}-${String(i + 1).padStart(2, '0')}`;
-  const events = annual.value.filter(e => e.paymentDate?.startsWith(prefix));
-  return { month: i + 1, amount: events.reduce((total, e) => total + (netAmount(e) ?? 0), 0), pending: events.filter(e => netAmount(e) === null).length };
-}));
-const maxMonthly = computed(() => Math.max(1, ...monthly.value.map(m => m.amount)));
 const etfOptions = computed(() => {
   const map = new Map<string, string>();
   feed.value.events.forEach(event => map.set(event.stockCode, event.stockName));
@@ -51,7 +52,14 @@ const goalPlan = computed(() => parseDividendGoalPlan({ monthlyTarget: goalMonth
 const goalProjection = computed(() => projectDividendGoals(goalPlan.value, feed.value.events, holdings.value, taipeiToday()));
 const goalMonthProjection = computed(() => projectDividendGoalMonths(goalPlan.value, goalProjection.value));
 const projectedMonthlyIncome = computed(() => goalMonthProjection.value.reduce((sum, item) => sum + item.currentIncome, 0) / 12);
-const goalProgress = computed(() => goalMonthly.value > 0 ? Math.min(100, projectedMonthlyIncome.value / goalMonthly.value * 100) : 0);
+const projectedAnnualIncome = computed(() => goalProjection.value.reduce((sum, item) => sum + item.projectedAnnualIncome, 0));
+const conservativeAnnualIncome = computed(() => projectedAnnualIncome.value * 0.85);
+const annualTarget = computed(() => goalMonthly.value * 12);
+const annualGap = computed(() => Math.max(0, annualTarget.value - conservativeAnnualIncome.value));
+const goalProgress = computed(() => annualTarget.value > 0 ? Math.min(100, conservativeAnnualIncome.value / annualTarget.value * 100) : 0);
+const requiredAnnualCapital = computed(() => estimateAnnualGoalCapital(annualTarget.value, projectedAnnualIncome.value, goalProjection.value));
+const cashBalance = computed(() => latestCashBalance(cashFlows.value));
+const reinvestmentCandidates = computed(() => rankReinvestmentCandidates(goalProjection.value, cashBalance.value, Number(taipeiToday().slice(5, 7))));
 const goalChanged = computed(() => JSON.stringify(goalPlan.value) !== JSON.stringify({ monthlyTarget: savedGoalMonthly.value, items: savedGoalItems.value }));
 
 /** 依每日交易紀錄自動計算除息日前持股；已入帳後保留當時快照。 */
@@ -81,8 +89,9 @@ function revised(event: Dividend) {
 }
 /** 接收舊帳務模組同步事件，不上傳持股至公開資料來源。 */
 function syncPortfolio() {
-  holdings.value = state.inventory.map((h: Holding) => ({ stock_code: String(h.stock_code).trim(), stock_name: String(h.stock_name || ''), total_shares: Number(h.total_shares), current_price: h.current_price }));
+  holdings.value = state.inventory.map((h: Holding) => ({ stock_code: String(h.stock_code).trim(), stock_name: String(h.stock_name || ''), total_shares: Number(h.total_shares), current_price: h.current_price, avg_cost: h.avg_cost, market_value: h.market_value }));
   transactions.value = state.transactions.map((t: Transaction) => ({ ...t, stock_code: String(t.stock_code).trim() }));
+  cashFlows.value = state.cashFlow.map((flow: Record<string, unknown>) => ({ ...flow }));
   isDemo.value = state.isDemo;
   portfolioReady.value = true;
   storageError.value = false;
@@ -117,6 +126,8 @@ function addGoalItem() {
   goalMessage.value = '';
 }
 function removeGoalItem(code: string) { goalItems.value = goalItems.value.filter(item => item.stockCode !== code); }
+/** 切換年度目標的精簡檢視，避免同頁同時展開大量資訊。 */
+function setGoalView(view: 'overview' | 'months' | 'candidates') { goalView.value = view; }
 /** Demo 寫入瀏覽器；個人模式由 Apps Script 同時儲存目標並 upsert 0 庫存。 */
 async function persistGoalPlan() {
   goalSaving.value = true;
@@ -191,49 +202,63 @@ onUnmounted(() => window.removeEventListener('portfolio-updated', syncPortfolio)
       <div class="panel"><p class="text-sm text-slate-400">已入帳・淨額</p><p class="text-2xl font-bold mt-3 text-emerald-300">{{ money(received) }}</p><p class="hint">發放日到達即自動入帳，並同步至總覽</p></div>
       <div class="panel"><p class="text-sm text-slate-400">尚待補齊資料</p><p class="text-2xl font-bold mt-3">{{ pendingCount }} <span class="text-sm font-normal text-slate-400">筆</span></p><p class="hint">尚有 {{ undated }} 筆發放日未公告</p></div>
     </div>
-    <div class="panel space-y-5">
+    <section class="panel space-y-5" aria-labelledby="annual-goal-title">
       <div class="flex flex-wrap items-start justify-between gap-4">
-        <div><h3 class="font-semibold">ETF 配息投資目標</h3><p class="hint">儲存 ETF 後會自動加入庫存，初始股數為 0；實際持股只由購買／賣出紀錄更新。</p></div>
-        <div class="text-right"><p class="text-xs text-slate-400">目前達成</p><p class="text-2xl font-bold text-indigo-300">{{ goalProgress.toFixed(1) }}%</p></div>
+        <div><p class="text-xs font-semibold tracking-widest text-indigo-400 mb-2">REINVESTMENT PLAN</p><h3 id="annual-goal-title" class="text-lg font-semibold">年度配息投資目標</h3><p class="hint">以全年配息能力為主，月份分布與再投入候選分開檢視。</p></div>
+        <div class="text-right"><p class="text-xs text-slate-400">保守達成率</p><p class="text-3xl font-bold text-indigo-300">{{ goalProgress.toFixed(1) }}%</p><p class="text-xs text-slate-500 mt-1">基準預估的 85%</p></div>
       </div>
-      <div data-testid="saved-goal-summary" class="rounded-lg border border-slate-800 bg-slate-950/50 p-3 text-sm text-slate-300">
-        <span class="text-slate-400">目前已儲存：</span>每月 {{ money(savedGoalMonthly) }}・{{ savedGoalItems.length ? savedGoalItems.map(item => item.stockCode).join('、') : '尚未選擇 ETF' }}
-        <span v-if="goalChanged" class="ml-2 text-amber-300">・有尚未儲存的變更</span>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3" data-testid="annual-goal-summary">
+        <div class="metric"><p>年度目標</p><strong>{{ money(annualTarget) }}</strong><small>月均 {{ money(goalMonthly) }}</small></div>
+        <div class="metric"><p>基準預估年配息</p><strong>{{ money(projectedAnnualIncome) }}</strong><small>目前月均 {{ money(projectedMonthlyIncome) }}</small></div>
+        <div class="metric"><p>保守預估年配息</p><strong class="text-emerald-300">{{ money(conservativeAnnualIncome) }}</strong><small>以基準預估 85% 計</small></div>
+        <div class="metric"><p>保守情境尚缺</p><strong class="text-amber-200">{{ money(annualGap) }}</strong><small>尚需資金 {{ requiredAnnualCapital === null ? '待股價資料' : money(requiredAnnualCapital) }}</small></div>
       </div>
-      <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-3 items-end">
-        <label class="text-sm">希望每月平均配息<input v-model.number="goalMonthly" class="field mt-2 w-full" type="number" min="0" max="1000000000" step="100" aria-label="每月配息目標"></label>
-        <label class="text-sm">加入 ETF<input v-model="newGoalCode" class="field mt-2 w-full" list="etf-goal-options" placeholder="輸入代號，例如 0056" @keyup.enter="addGoalItem"><datalist id="etf-goal-options"><option v-for="item in etfOptions" :key="item.stockCode" :value="item.stockCode">{{ item.stockName }}</option></datalist></label>
-        <button type="button" class="secondary" @click="addGoalItem">加入</button>
+      <div class="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 flex flex-wrap items-center justify-between gap-4" data-testid="cash-pool">
+        <div><p class="text-sm text-emerald-200">可再投入現金池</p><p class="text-2xl font-bold mt-1">{{ money(cashBalance) }}</p><p class="hint !mt-1">直接採現金流水帳最新一筆餘額，不另外維護。</p></div>
+        <button type="button" class="secondary" @click="goalView = 'candidates'">查看可買ETF</button>
       </div>
-      <div v-if="goalItems.length" class="overflow-x-auto border border-slate-800 rounded-lg">
-        <table class="w-full text-sm text-left whitespace-nowrap">
-          <thead class="bg-slate-950/50 text-slate-400"><tr><th>ETF</th><th>預估發放月份</th><th>目前股數</th><th>建議總股數</th><th>尚需股數</th><th>尚需資金（約）</th><th></th></tr></thead>
-          <tbody class="divide-y divide-slate-800"><tr v-for="item in goalProjection" :key="item.stockCode"><td><strong>{{ item.stockCode }}</strong><p class="text-xs text-slate-400">{{ item.stockName }}</p></td><td>{{ item.payoutMonths.length ? item.payoutMonths.map(month => `${month}月`).join('、') : '資料不足' }}</td><td>{{ item.shares.toLocaleString('zh-TW') }}</td><td>{{ item.recommendedShares === null ? '待配息資料' : item.recommendedShares.toLocaleString('zh-TW') }}</td><td>{{ item.requiredShares === null ? '待配息資料' : item.requiredShares.toLocaleString('zh-TW') }}</td><td>{{ item.requiredCapital === null ? '待股價資料' : money(item.requiredCapital) }}</td><td><button type="button" class="text-rose-300 hover:text-rose-200" @click="removeGoalItem(item.stockCode)">移除</button></td></tr></tbody>
-        </table>
-      </div>
-      <p v-else class="text-sm text-slate-400">尚未選擇 ETF。</p>
-      <div v-if="goalItems.length" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
-        <div v-for="month in goalMonthProjection" :key="month.month" class="rounded-lg border p-3" :class="month.etfs.length ? 'border-slate-800 bg-slate-950/50' : 'border-amber-500/30 bg-amber-500/5'">
-          <div class="flex items-center justify-between gap-2"><strong>{{ month.month }} 月</strong><span class="text-xs" :class="month.etfs.length ? 'text-slate-400' : 'text-amber-300'">{{ month.etfs.length ? `${month.etfs.length} 檔` : '無配息 ETF' }}</span></div>
-          <div v-if="month.etfs.length" class="mt-3 space-y-2 text-xs"><p v-for="etf in month.etfs" :key="etf.stockCode"><span class="text-indigo-300">{{ etf.stockCode }}</span> 負責 {{ money(etf.targetIncome) }}<br><span class="text-slate-400">約 {{ etf.recommendedShares.toLocaleString('zh-TW') }} 股 × {{ etf.dividendPerShare }}</span></p><p class="pt-2 border-t border-slate-800 text-slate-300">目前約 {{ money(month.currentIncome) }}</p></div>
-          <p v-else class="text-xs text-amber-200 mt-3">目前選擇無法覆蓋本月 NT$ {{ goalMonthly.toLocaleString('zh-TW') }} 目標。</p>
+      <nav class="goal-tabs" aria-label="投資目標檢視">
+        <button v-for="tab in goalTabs" :key="tab.id" type="button" :class="{ active: goalView === tab.id }" @click="setGoalView(tab.id)">{{ tab.label }}</button>
+      </nav>
+
+      <div v-if="goalView === 'overview'" class="space-y-4">
+        <div data-testid="saved-goal-summary" class="rounded-lg border border-slate-800 bg-slate-950/50 p-3 text-sm text-slate-300"><span class="text-slate-400">目前已儲存：</span>年目標 {{ money(savedGoalMonthly * 12) }}・{{ savedGoalItems.length ? savedGoalItems.map(item => item.stockCode).join('、') : '尚未選擇 ETF' }}<span v-if="goalChanged" class="ml-2 text-amber-300">・有尚未儲存的變更</span></div>
+        <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-3 items-end">
+          <label class="text-sm">希望每月平均配息<input v-model.number="goalMonthly" class="field mt-2 w-full" type="number" min="0" max="1000000000" step="100" aria-label="每月配息目標"><span class="hint !mt-1 block">年度目標自動為 {{ money(annualTarget) }}</span></label>
+          <label class="text-sm">加入 ETF<input v-model="newGoalCode" class="field mt-2 w-full" list="etf-goal-options" placeholder="輸入代號，例如 0056" @keyup.enter="addGoalItem"><datalist id="etf-goal-options"><option v-for="item in etfOptions" :key="item.stockCode" :value="item.stockCode">{{ item.stockName }}</option></datalist></label>
+          <button type="button" class="secondary" @click="addGoalItem">加入</button>
         </div>
-      </div>
-      <div class="flex flex-wrap items-center justify-between gap-3"><p class="text-sm text-slate-300">目前預估月均 {{ money(projectedMonthlyIncome) }}／目標 {{ money(goalMonthly) }}</p><button type="button" class="primary" :disabled="goalSaving" @click="persistGoalPlan">{{ goalSaving ? '儲存中…' : '儲存投資目標' }}</button></div>
-      <p v-if="goalMessage" class="banner" role="status">{{ goalMessage }}</p>
-      <p class="hint">依近期實際／已公告發放月份推估。同月發放的 ETF 依每股配息比例分攤該月目標，因此建議持有相同股數；同一 ETF 採各發放月所需股數的最大值，確保每個已覆蓋月份都能達到分配給它的金額。未覆蓋月份需再加入該月會發放的 ETF。</p>
-    </div>
-    <div class="panel">
-      <h3 class="font-semibold">每月預估股息 <span class="text-xs text-slate-400 font-normal">依交易紀錄股數，每筆固定扣除 NT$10</span></h3>
-      <div class="grid grid-cols-3 sm:grid-cols-6 xl:grid-cols-12 gap-3 mt-5">
-        <div v-for="m in monthly" :key="m.month" class="bg-slate-950/60 rounded-lg p-3 min-w-0">
-          <p class="text-xs text-slate-400">{{ m.month }} 月</p><p class="text-sm font-semibold mt-2">{{ m.amount.toLocaleString('zh-TW', { maximumFractionDigits: 2 }) }}</p>
-          <div class="h-1 bg-slate-800 rounded mt-3"><div class="bg-indigo-400 h-1 rounded" :style="{ width: `${m.amount / maxMonthly * 100}%` }"></div></div>
-          <p v-if="m.pending" class="text-xs text-amber-300 mt-2">{{ m.pending }} 筆待確認</p>
+        <div v-if="goalItems.length" class="overflow-x-auto border border-slate-800 rounded-lg">
+          <table class="w-full text-sm text-left whitespace-nowrap"><thead class="bg-slate-950/50 text-slate-400"><tr><th>ETF</th><th>發放月份</th><th>目前股數</th><th>預估年配息</th><th>保守殖利率</th><th></th></tr></thead><tbody class="divide-y divide-slate-800"><tr v-for="item in goalProjection" :key="item.stockCode"><td><strong>{{ item.stockCode }}</strong><p class="text-xs text-slate-400">{{ item.stockName }}</p></td><td>{{ item.payoutMonths.length ? item.payoutMonths.map(month => `${month}月`).join('、') : '資料不足' }}</td><td>{{ item.shares.toLocaleString('zh-TW') }}</td><td>{{ money(item.projectedAnnualIncome) }}</td><td>{{ item.currentPrice && item.annualDividendPerShare ? `${(item.annualDividendPerShare * 0.85 / item.currentPrice * 100).toFixed(2)}%` : '待資料' }}</td><td><button type="button" class="text-rose-300 hover:text-rose-200" @click="removeGoalItem(item.stockCode)">移除</button></td></tr></tbody></table>
         </div>
+        <p v-else class="text-sm text-slate-400">尚未選擇 ETF。</p>
+        <div class="flex flex-wrap items-center justify-between gap-3"><p class="text-sm text-slate-300">儲存後同步更新庫存目標ETF；實際股數仍只由交易紀錄更新。</p><button type="button" class="primary" :disabled="goalSaving" @click="persistGoalPlan">{{ goalSaving ? '儲存中…' : '儲存投資目標' }}</button></div>
+        <p v-if="goalMessage" class="banner" role="status">{{ goalMessage }}</p>
       </div>
-      <p class="hint">發放日未公告的紀錄不分配至月份；每筆配息固定扣除 NT$10 匯費，沒有交易的日期視為沒有交易。</p>
-    </div>
+
+      <div v-else-if="goalView === 'months'" class="space-y-4" data-testid="monthly-goal-cards">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <details v-for="month in goalMonthProjection" :key="month.month" class="month-card" :class="month.etfs.length ? '' : 'empty'">
+            <summary><span><strong>{{ month.month }} 月</strong><small>{{ month.etfs.length ? `${month.etfs.length} 檔 ETF` : '無配息 ETF' }}</small></span><span class="text-right"><strong>{{ money(month.currentIncome) }}</strong><small>{{ projectedAnnualIncome > 0 ? `${(month.currentIncome / projectedAnnualIncome * 100).toFixed(1)}%／全年` : '0%／全年' }}</small></span></summary>
+            <div v-if="month.etfs.length" class="month-detail"><p v-for="etf in month.etfs" :key="etf.stockCode"><span><b>{{ etf.stockCode }}</b>・{{ etf.dividendPerShare }}／股</span><strong>{{ money(etf.currentIncome) }}</strong></p><p class="month-gap"><span>與月均目標差距</span><strong :class="month.currentIncome >= goalMonthly ? 'text-emerald-300' : 'text-amber-200'">{{ month.currentIncome >= goalMonthly ? '+' : '-' }}{{ money(Math.abs(month.currentIncome - goalMonthly)) }}</strong></p></div>
+            <p v-else class="month-detail text-amber-200">所選 ETF 目前沒有本月發放紀錄，與月均目標差 {{ money(goalMonthly) }}。</p>
+          </details>
+        </div>
+        <p class="hint">金額依目前股數與近期實際／已公告的每股配息推估；占比以基準預估年配息計算。月份卡片可展開查看各 ETF 貢獻。</p>
+      </div>
+
+      <div v-else class="space-y-4" data-testid="reinvestment-candidates">
+        <div class="rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-3 text-sm text-slate-300">排序優先補足低於等權配置的ETF，再參考保守殖利率與下次預估發放月份。目前沒有歷史價格序列，因此不顯示或猜測回檔幅度。</div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <article v-for="(item, index) in reinvestmentCandidates" :key="item.stockCode" class="candidate-card">
+            <div class="flex items-start justify-between gap-3"><div><span class="rank">#{{ index + 1 }}</span><strong class="ml-2">{{ item.stockCode }}</strong><p class="text-xs text-slate-400 mt-1">{{ item.stockName }}</p></div><p class="text-right text-sm"><span class="text-slate-400">現金池最多</span><br><strong>{{ item.affordableShares === null ? '待股價' : `${item.affordableShares.toLocaleString('zh-TW')} 股` }}</strong></p></div>
+            <div class="grid grid-cols-3 gap-2 mt-4 text-xs"><p><span>目前配置</span><strong>{{ item.allocationPercent.toFixed(1) }}%</strong></p><p><span>等權基準</span><strong>{{ item.equalWeightPercent.toFixed(1) }}%</strong></p><p><span>投入後年息增加</span><strong>{{ item.addedConservativeAnnualIncome === null ? '待資料' : money(item.addedConservativeAnnualIncome) }}</strong></p></div>
+            <ul class="mt-4 text-xs text-slate-300 space-y-1"><li v-for="reason in item.reasons" :key="reason">・{{ reason }}</li></ul>
+          </article>
+        </div>
+        <p class="hint">「最多可買」是假設將目前現金池全數投入單一ETF的比較值，不是買進建議；除息日價格調整也不視為保證便宜或保證填息。</p>
+      </div>
+    </section>
     <div class="panel !p-0 overflow-hidden">
       <div class="p-5 flex flex-wrap items-center justify-between gap-3"><h3 class="font-semibold">我的配息紀錄</h3><input v-model="search" class="field" type="search" aria-label="搜尋配息股票" placeholder="搜尋股票代號或名稱"></div>
       <div class="overflow-x-auto">
@@ -268,6 +293,28 @@ onUnmounted(() => window.removeEventListener('portfolio-updated', syncPortfolio)
 .field { @apply bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-indigo-400 focus:outline-none; }
 .banner { @apply border border-amber-500/20 bg-amber-500/5 text-amber-200 text-sm rounded-lg p-3; }
 .hint { @apply text-xs text-slate-400 mt-3 leading-relaxed; }
+.metric { @apply rounded-xl border border-slate-800 bg-slate-950/50 p-4 min-w-0; }
+.metric p { @apply text-xs text-slate-400; }
+.metric strong { @apply block text-lg sm:text-xl mt-2 break-words; }
+.metric small { @apply block text-xs text-slate-500 mt-2; }
+.goal-tabs { @apply inline-flex max-w-full overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/60 p-1; }
+.goal-tabs button { @apply whitespace-nowrap rounded-md px-3 py-2 text-sm text-slate-400; }
+.goal-tabs button.active { @apply bg-indigo-600 text-white; }
+.month-card { @apply rounded-xl border border-slate-800 bg-slate-950/50; }
+.month-card.empty { @apply border-amber-500/30 bg-amber-500/5; }
+.month-card summary { @apply cursor-pointer list-none flex items-start justify-between gap-3 p-4; }
+.month-card summary::-webkit-details-marker { display: none; }
+.month-card summary span { @apply min-w-0; }
+.month-card summary strong { @apply block; }
+.month-card summary small { @apply block text-xs text-slate-400 mt-1; }
+.month-detail { @apply border-t border-slate-800 px-4 py-3 text-xs space-y-2; }
+.month-detail p { @apply flex items-start justify-between gap-3; }
+.month-gap { @apply pt-2 mt-2 border-t border-slate-800; }
+.candidate-card { @apply rounded-xl border border-slate-800 bg-slate-950/50 p-4; }
+.candidate-card .rank { @apply rounded-full bg-indigo-500/15 text-indigo-300 px-2 py-1 text-xs; }
+.candidate-card .grid p { @apply min-w-0; }
+.candidate-card .grid span { @apply block text-slate-500; }
+.candidate-card .grid strong { @apply block mt-1 break-words text-slate-200; }
 th, td { @apply px-4 py-4; }
 button:disabled { @apply opacity-40 cursor-not-allowed; }
 </style>

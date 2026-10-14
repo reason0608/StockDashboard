@@ -70,6 +70,12 @@ test('儲存 ETF 目標後自動建立 0 股 Demo 庫存', async ({ page }) => {
   await page.getByRole('button', { name: '儲存投資目標' }).click();
   await expect(page.getByText('投資目標已儲存，庫存清單已同步。')).toBeVisible();
   await expect(page.getByTestId('saved-goal-summary')).toContainText('0056');
+  await expect(page.getByTestId('annual-goal-summary')).toContainText('NT$ 120,000.00');
+  await expect(page.getByTestId('cash-pool')).toContainText('NT$ 165,810.00');
+  await page.getByRole('button', { name: '12個月分布' }).click();
+  await expect(page.getByTestId('monthly-goal-cards').locator('details')).toHaveCount(12);
+  await page.getByRole('button', { name: '再投入候選' }).click();
+  await expect(page.getByTestId('reinvestment-candidates')).toContainText('0056');
   await page.locator('#tab-btn-inventory').click();
   const row = page.locator('#inventory-table-body tr').filter({ hasText: '0056' });
   await expect(row).toBeVisible();

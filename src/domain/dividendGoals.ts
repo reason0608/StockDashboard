@@ -24,9 +24,86 @@ export interface DividendGoalProjection extends DividendGoalItem {
 
 export interface DividendGoalMonthProjection {
   month: number;
-  etfs: { stockCode: string; dividendPerShare: number; targetIncome: number; recommendedShares: number }[];
+  etfs: { stockCode: string; dividendPerShare: number; targetIncome: number; currentIncome: number; recommendedShares: number }[];
   currentIncome: number;
   recommendedIncome: number;
+}
+
+export interface ReinvestmentCandidate extends DividendGoalItem {
+  shares: number;
+  currentPrice: number | null;
+  marketValue: number;
+  allocationPercent: number;
+  equalWeightPercent: number;
+  conservativeYieldPercent: number | null;
+  nextPayoutMonth: number | null;
+  affordableShares: number | null;
+  addedConservativeAnnualIncome: number | null;
+  reasons: string[];
+}
+
+/**
+ * 取得現金流水帳的最新餘額。優先採最後一筆 account_balance，缺少時依收支類型重算。
+ * 同日資料再以 ID 中的數字排序，與總覽看板維持相同規則。
+ */
+export function latestCashBalance(cashFlows: Record<string, unknown>[]): number {
+  const sorted = [...cashFlows].sort((a, b) => {
+    const dateDiff = String(a.date || '').localeCompare(String(b.date || ''));
+    if (dateDiff) return dateDiff;
+    const idNumber = (value: unknown) => Number(String(value || '').replace(/\D/g, '')) || 0;
+    return idNumber(a.id) - idNumber(b.id);
+  });
+  const latest = sorted.at(-1);
+  const recorded = Number(latest?.account_balance);
+  if (latest && latest.account_balance !== '' && latest.account_balance != null && Number.isFinite(recorded)) return recorded;
+  return Math.round(sorted.reduce((balance, flow) => {
+    const amount = Number(flow.amount) || 0;
+    return /支出|交割/.test(String(flow.type || '')) ? balance - Math.abs(amount) : balance + amount;
+  }, 0) * 100) / 100;
+}
+
+/** 以目前選定 ETF 的價格與保守配息率估算完成年度缺口所需資金。 */
+export function estimateAnnualGoalCapital(annualTarget: number, projectedAnnualIncome: number, projections: DividendGoalProjection[], safetyFactor = 0.85): number | null {
+  const gap = Math.max(0, annualTarget - projectedAnnualIncome * safetyFactor);
+  if (!gap) return 0;
+  const usable = projections.filter(item => item.currentPrice && item.annualDividendPerShare > 0);
+  if (!usable.length) return null;
+  const currentMarketValue = usable.reduce((sum, item) => sum + item.shares * (item.currentPrice || 0), 0);
+  const weightedYield = currentMarketValue > 0
+    ? usable.reduce((sum, item) => sum + item.shares * item.annualDividendPerShare * safetyFactor, 0) / currentMarketValue
+    : usable.reduce((sum, item) => sum + item.annualDividendPerShare * safetyFactor / (item.currentPrice || 1), 0) / usable.length;
+  return weightedYield > 0 ? Math.ceil(gap / weightedYield) : null;
+}
+
+/**
+ * 產生可解釋的再投入候選清單。因目前沒有歷史價格，僅以配置不足優先，
+ * 再依保守殖利率及距下次發放月份排序，不把除息或單日價格誤判為回檔。
+ */
+export function rankReinvestmentCandidates(projections: DividendGoalProjection[], cashBalance: number, currentMonth: number, safetyFactor = 0.85): ReinvestmentCandidate[] {
+  const withPrice = projections.filter(item => item.currentPrice !== null);
+  const totalMarketValue = withPrice.reduce((sum, item) => sum + item.shares * (item.currentPrice || 0), 0);
+  const equalWeightPercent = projections.length ? 100 / projections.length : 0;
+  const monthDistance = (month: number) => (month - currentMonth + 12) % 12;
+  return projections.map(item => {
+    const currentPrice = item.currentPrice;
+    const marketValue = currentPrice === null ? 0 : item.shares * currentPrice;
+    const allocationPercent = totalMarketValue > 0 ? marketValue / totalMarketValue * 100 : 0;
+    const conservativeYieldPercent = currentPrice && item.annualDividendPerShare > 0 ? item.annualDividendPerShare * safetyFactor / currentPrice * 100 : null;
+    const nextPayoutMonth = item.payoutMonths.length ? [...item.payoutMonths].sort((a, b) => monthDistance(a) - monthDistance(b))[0] : null;
+    const affordableShares = currentPrice ? Math.max(0, Math.floor(Math.max(0, cashBalance) / currentPrice)) : null;
+    const addedConservativeAnnualIncome = affordableShares === null ? null : Math.round(affordableShares * item.annualDividendPerShare * safetyFactor * 100) / 100;
+    const reasons: string[] = [];
+    if (allocationPercent + 0.1 < equalWeightPercent) reasons.push('配置低於等權基準');
+    if (conservativeYieldPercent !== null) reasons.push(`保守殖利率 ${conservativeYieldPercent.toFixed(2)}%`);
+    if (nextPayoutMonth !== null) reasons.push(`下次預估 ${nextPayoutMonth} 月發放`);
+    if (!reasons.length) reasons.push('資料不足，僅供觀察');
+    return { ...item, shares: item.shares, currentPrice, marketValue, allocationPercent, equalWeightPercent, conservativeYieldPercent, nextPayoutMonth, affordableShares, addedConservativeAnnualIncome, reasons };
+  }).sort((a, b) => {
+    const aGap = a.equalWeightPercent - a.allocationPercent;
+    const bGap = b.equalWeightPercent - b.allocationPercent;
+    return bGap - aGap || (b.conservativeYieldPercent || 0) - (a.conservativeYieldPercent || 0)
+      || (a.nextPayoutMonth === null ? 99 : monthDistance(a.nextPayoutMonth)) - (b.nextPayoutMonth === null ? 99 : monthDistance(b.nextPayoutMonth));
+  });
 }
 
 /** 驗證儲存內容並依股票代號去重，避免重複建立庫存占位列。 */
@@ -121,6 +198,7 @@ export function projectDividendGoalMonths(plan: DividendGoalPlan, projections: D
       stockCode: item.stockCode,
       dividendPerShare: item.monthlyDividendPerShare[month],
       targetIncome: totalDividendPerShare > 0 ? plan.monthlyTarget * item.monthlyDividendPerShare[month] / totalDividendPerShare : 0,
+      currentIncome: Math.round(item.shares * item.monthlyDividendPerShare[month] * 100) / 100,
       recommendedShares: totalDividendPerShare > 0 ? Math.ceil(plan.monthlyTarget / totalDividendPerShare) : 0
     }));
     return {
