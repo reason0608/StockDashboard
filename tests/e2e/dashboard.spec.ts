@@ -74,6 +74,7 @@ test('儲存 ETF 目標後自動建立 0 股 Demo 庫存', async ({ page }) => {
   await expect(page.getByTestId('cash-pool')).toContainText('NT$ 165,810.00');
   await page.getByRole('button', { name: '12個月分布' }).click();
   await expect(page.getByTestId('monthly-goal-cards').locator('details')).toHaveCount(12);
+  await expect(page.getByTestId('monthly-goal-cards').locator('details[open]')).toHaveCount(12);
   await page.getByRole('button', { name: '再投入候選' }).click();
   await expect(page.getByTestId('reinvestment-candidates')).toContainText('0056');
   await page.locator('#tab-btn-inventory').click();

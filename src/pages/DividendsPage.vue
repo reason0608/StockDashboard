@@ -238,7 +238,7 @@ onUnmounted(() => window.removeEventListener('portfolio-updated', syncPortfolio)
 
       <div v-else-if="goalView === 'months'" class="space-y-4" data-testid="monthly-goal-cards">
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <details v-for="month in goalMonthProjection" :key="month.month" class="month-card" :class="month.etfs.length ? '' : 'empty'">
+          <details v-for="month in goalMonthProjection" :key="month.month" open class="month-card" :class="month.etfs.length ? '' : 'empty'">
             <summary><span><strong>{{ month.month }} 月</strong><small>{{ month.etfs.length ? `${month.etfs.length} 檔 ETF` : '無配息 ETF' }}</small></span><span class="text-right"><strong>{{ money(month.currentIncome) }}</strong><small>{{ projectedAnnualIncome > 0 ? `${(month.currentIncome / projectedAnnualIncome * 100).toFixed(1)}%／全年` : '0%／全年' }}</small></span></summary>
             <div v-if="month.etfs.length" class="month-detail"><p v-for="etf in month.etfs" :key="etf.stockCode"><span><b>{{ etf.stockCode }}</b>・{{ etf.dividendPerShare }}／股</span><strong>{{ money(etf.currentIncome) }}</strong></p><p class="month-gap"><span>與月均目標差距</span><strong :class="month.currentIncome >= goalMonthly ? 'text-emerald-300' : 'text-amber-200'">{{ month.currentIncome >= goalMonthly ? '+' : '-' }}{{ money(Math.abs(month.currentIncome - goalMonthly)) }}</strong></p></div>
             <p v-else class="month-detail text-amber-200">所選 ETF 目前沒有本月發放紀錄，與月均目標差 {{ money(goalMonthly) }}。</p>
