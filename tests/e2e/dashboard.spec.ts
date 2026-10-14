@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
 
 const fixtureEvent = { id: '2330:2026-06-11', stockCode: '2330', stockName: '台積電', exDate: '2026-06-11', paymentDate: '2026-07-09', cashPerShare: 6, source: '測試公告', sourceUrl: 'https://example.com/', updatedAt: '2026-09-18T00:00:00Z' };
-const feed = { version: 1, updatedAt: '2026-09-18T00:00:00Z', sources: [], events: [fixtureEvent] };
+const etfEvent = { id: '0056:2026-06-20', stockCode: '0056', stockName: '元大高股息', exDate: '2026-06-20', paymentDate: '2026-07-15', cashPerShare: 1.2, source: '測試公告', sourceUrl: 'https://example.com/', updatedAt: '2026-09-18T00:00:00Z' };
+const feed = { version: 1, updatedAt: '2026-09-18T00:00:00Z', sources: [], events: [fixtureEvent, etfEvent] };
 
 test.beforeEach(async ({ page }) => {
   // 固定時間與公告，不因每日資料變動導致互動測試不穩定。
@@ -59,6 +60,19 @@ test('股息頁不顯示備份與手動更新控制', async ({ page }) => {
   await expect(page.getByText('匯入股息備份')).toHaveCount(0);
   await expect(page.getByRole('button', { name: '重新讀取公告' })).toHaveCount(0);
   await expect(page.locator('.dividends tbody')).toContainText('已入帳');
+});
+
+test('儲存 ETF 目標後自動建立 0 股 Demo 庫存', async ({ page }) => {
+  await page.goto('./#/dividends');
+  await page.getByLabel('每月配息目標').fill('10000');
+  await page.getByPlaceholder('輸入代號，例如 0056').fill('0056');
+  await page.getByRole('button', { name: '加入', exact: true }).click();
+  await page.getByRole('button', { name: '儲存投資目標' }).click();
+  await expect(page.getByText('投資目標已儲存，庫存清單已同步。')).toBeVisible();
+  await page.locator('#tab-btn-inventory').click();
+  const row = page.locator('#inventory-table-body tr').filter({ hasText: '0056' });
+  await expect(row).toBeVisible();
+  await expect(row).toContainText('0');
 });
 
 test('公告更新失敗保留快取，手機畫面不超出頁寬', async ({ page }) => {

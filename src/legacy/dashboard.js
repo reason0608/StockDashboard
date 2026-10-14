@@ -38,6 +38,7 @@ import { analyzeQuoteQuality } from '../domain/quoteQuality';
             inventory: [],
             portfolioSnapshots: [],
             investmentSettings: {},
+            dividendGoals: [],
             apiUrl: "",
             isDemo: true,
             lastError: "",
@@ -181,7 +182,7 @@ import { analyzeQuoteQuality } from '../domain/quoteQuality';
         };
 
         // --- 3. 數據同步核心 ---
-        async function reloadData() {
+        export async function reloadData() {
             const syncIcon = document.getElementById('sync-icon');
             if (syncIcon) syncIcon.classList.add('animate-spin');
             showLoadingToast("正在同步資產數據...");
@@ -192,6 +193,7 @@ import { analyzeQuoteQuality } from '../domain/quoteQuality';
                     state.transactions = JSON.parse(localStorage.getItem('demo_transactions')) || DEFAULT_TRANSACTIONS;
                     state.portfolioSnapshots = [];
                     state.investmentSettings = { monthly_passive_income_target: Number(localStorage.getItem('demo_monthly_passive_income_target') || 0) };
+                    state.dividendGoals = JSON.parse(localStorage.getItem('demo_dividend_goals') || '[]');
                     calculateInventoryFromTransactions();
                     document.getElementById('connection-error-banner').classList.add('hidden');
                 } else {
@@ -215,6 +217,7 @@ import { analyzeQuoteQuality } from '../domain/quoteQuality';
                     state.inventory = (data.inventory || []).filter(item => item.stock_code);
                     state.portfolioSnapshots = Array.isArray(data.portfolioSnapshots) ? data.portfolioSnapshots : [];
                     state.investmentSettings = data.investmentSettings && typeof data.investmentSettings === 'object' ? data.investmentSettings : {};
+                    state.dividendGoals = Array.isArray(data.dividendGoals) ? data.dividendGoals : [];
                     state.lastError = "";
                     state.lastSyncAt = new Date().toISOString();
 
@@ -243,6 +246,7 @@ import { analyzeQuoteQuality } from '../domain/quoteQuality';
                 state.transactions = JSON.parse(localStorage.getItem('demo_transactions')) || DEFAULT_TRANSACTIONS;
                 state.portfolioSnapshots = [];
                 state.investmentSettings = { monthly_passive_income_target: Number(localStorage.getItem('demo_monthly_passive_income_target') || 0) };
+                state.dividendGoals = JSON.parse(localStorage.getItem('demo_dividend_goals') || '[]');
                 calculateInventoryFromTransactions();
                 
                 renderDashboard();
@@ -296,7 +300,12 @@ import { analyzeQuoteQuality } from '../domain/quoteQuality';
                 }
             });
 
-            state.inventory = Object.values(invMap).filter(item => item.total_shares > 0).map(item => {
+            state.dividendGoals.forEach(goal => {
+                const code = String(goal.stock_code || goal.stockCode || '').trim();
+                if (code && !invMap[code]) invMap[code] = { stock_code: code, stock_name: goal.stock_name || goal.stockName || '', total_shares: 0, total_cost_spent: 0 };
+            });
+
+            state.inventory = Object.values(invMap).filter(item => item.total_shares >= 0).map(item => {
                 const demoPriceInfo = DEMO_PRICES[item.stock_code] || { price: 100 };
                 const current_price = demoPriceInfo.price;
                 const market_value = item.total_shares * current_price;
@@ -931,6 +940,7 @@ import { analyzeQuoteQuality } from '../domain/quoteQuality';
             localStorage.removeItem("husband_name");
             localStorage.removeItem("wife_name");
             localStorage.removeItem("demo_monthly_passive_income_target");
+            localStorage.removeItem("demo_dividend_goals");
             showToast("已重置為 DEMO 測試模式，正在重刷...", "check-circle", "text-emerald-400");
             setTimeout(() => {
                 window.location.reload();

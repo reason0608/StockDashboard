@@ -39,6 +39,7 @@ TypeScript 使用 5.9，避免 Vue 型別檢查工具尚未相容 TypeScript 7 �
 - 配息股數直接由每日交易紀錄推算；自動入帳快照只存於當前瀏覽器。原有帳務仍照現有 Sheets 方式同步。
 - 持股頁顯示行情資料狀態、網頁同步時間、報價日期範圍、無效價格及可能過期的股票。若 `stock_inventory` 提供 `price_date`（`yyyy-MM-dd`）欄位，可檢查報價新鮮度；未提供時會提示但不影響既有功能。
 - 總覽顯示近 12 個月平均每月被動收入、共同目標與達成率；目標由設定頁保存至 `investment_settings`，夫妻裝置共用。
+- 配息頁可儲存 ETF 投資目標。雲端模式寫入 `dividend_goals`，並自動在 `stock_inventory` 建立 0 股占位列；同代號已存在時不覆寫。若庫存上一列含行情或交易彙總公式，新列會沿用相同公式，實際股數仍由交易紀錄決定。
 - 總覽的雙軸歷史曲線讀取 `portfolio_daily_snapshots`，同時呈現總資產與近 12 月平均月股息。
 
 ### 庫存報價日期
@@ -58,7 +59,7 @@ GOOGLEFINANCE 可能延遲或暫時缺值；狀態面板只用來揭露資料品
 完整新版程式位於 `public/google-apps-script.txt`，也可在網站設定頁按「點此複製」。更新步驟：
 
 1. 備份目前 Apps Script，將新版完整程式貼入綁定試算表的專案。
-2. 在 Apps Script 編輯器手動執行 `setupStockDashboard()` 一次並授權。
+2. 將網站設定頁提供的最新版 `google-apps-script.txt` 完整貼入 Apps Script，手動執行 `setupStockDashboard()` 一次並授權。
 3. 此函式會初始化 `investment_settings`、檢查 `portfolio_daily_snapshots` 標題，並建立每日約 18:30 的快照觸發器。
 4. 建立新的 Web App 部署版本；若產生新的 `/exec` URL，回到 Dashboard 設定頁更新網址。
 5. 重新發布 GitHub Pages。

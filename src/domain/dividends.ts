@@ -24,7 +24,7 @@ export interface Confirmation {
   cashFlowId?: string;
 }
 export interface Ledger { version: 1; confirmations: Record<string, Confirmation> }
-export interface Holding { stock_code: string; stock_name: string; total_shares: number }
+export interface Holding { stock_code: string; stock_name: string; total_shares: number; current_price?: number | string }
 
 /** 嚴格檢查日期，防止不存在的日曆日期被 Date 自動進位。 */
 export function isDate(value: unknown): value is string {

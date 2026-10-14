@@ -5,6 +5,7 @@
  * 3. 建立新版本並重新部署 Web App，沿用原本「執行身分：自己」與存取設定。
  */
 var ALLOWED_APPEND_SHEETS = ['users_cash_flow', 'daily_transactions'];
+var DIVIDEND_GOAL_HEADERS = ['stock_code', 'stock_name', 'created_at', 'updated_at'];
 var SNAPSHOT_HEADERS = [
   'snapshot_date', 'captured_at', 'cash_balance', 'stock_market_value', 'total_assets',
   'total_cost_basis', 'unrealized_pnl', 'total_contributed', 'husband_contributed',
@@ -21,7 +22,8 @@ function doGet() {
     transactions: getSheetData_(ss.getSheetByName('daily_transactions')),
     inventory: getSheetData_(ss.getSheetByName('stock_inventory')),
     portfolioSnapshots: getSheetData_(ss.getSheetByName('portfolio_daily_snapshots')),
-    investmentSettings: getSettings_(ss)
+    investmentSettings: getSettings_(ss),
+    dividendGoals: getSheetData_(ss.getSheetByName('dividend_goals'))
   };
   return json_(result);
 }
@@ -33,6 +35,10 @@ function doPost(e) {
     var ss = getSpreadsheet_();
     if (params.action === 'saveSettings') {
       saveSettings_(ss, params.settings || {});
+      return json_({ status: 'success' });
+    }
+    if (params.action === 'saveDividendGoals') {
+      saveDividendGoals_(ss, params.plan || {});
       return json_({ status: 'success' });
     }
     if (ALLOWED_APPEND_SHEETS.indexOf(params.targetSheet) === -1) {
@@ -53,6 +59,7 @@ function setupStockDashboard() {
   PropertiesService.getScriptProperties().setProperty('SPREADSHEET_ID', ss.getId());
   ensureSheet_(ss, 'investment_settings', ['setting_key', 'setting_value']);
   ensureSheet_(ss, 'portfolio_daily_snapshots', SNAPSHOT_HEADERS);
+  ensureSheet_(ss, 'dividend_goals', DIVIDEND_GOAL_HEADERS);
   ScriptApp.getProjectTriggers().forEach(function(trigger) {
     if (trigger.getHandlerFunction() === 'capturePortfolioDailySnapshot') ScriptApp.deleteTrigger(trigger);
   });
@@ -151,6 +158,65 @@ function saveSettings_(ss, settings) {
     if (!isFinite(value) || value < 0 || value > 1000000000) throw new Error('目標金額超出允許範圍');
     upsertSetting_(sheet, key, value);
   });
+}
+
+/** 儲存 ETF 目標，並在 stock_inventory 建立不覆寫既有資料的 0 股占位列。 */
+function saveDividendGoals_(ss, plan) {
+  var target = Number(plan.monthlyTarget);
+  if (!isFinite(target) || target < 0 || target > 1000000000) throw new Error('每月配息目標不正確');
+  if (!Array.isArray(plan.items) || plan.items.length > 100) throw new Error('ETF 目標清單不正確');
+  var seen = {};
+  var items = plan.items.map(function(item) {
+    var code = String(item.stockCode || '').trim().toUpperCase();
+    var name = String(item.stockName || '').trim().slice(0, 200);
+    if (!/^[0-9A-Z]{4,10}$/.test(code) || seen[code]) return null;
+    seen[code] = true;
+    return { stockCode: code, stockName: name };
+  }).filter(Boolean);
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    saveSettings_(ss, { monthly_passive_income_target: target });
+    var sheet = ensureSheet_(ss, 'dividend_goals', DIVIDEND_GOAL_HEADERS);
+    var old = getSheetData_(sheet);
+    var created = {};
+    old.forEach(function(row) { created[String(row.stock_code)] = row.created_at; });
+    if (sheet.getLastRow() > 1) sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).clearContent();
+    var now = Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd HH:mm:ss');
+    if (items.length) sheet.getRange(2, 1, items.length, DIVIDEND_GOAL_HEADERS.length).setValues(items.map(function(item) {
+      return [item.stockCode, item.stockName, created[item.stockCode] || now, now];
+    }));
+    items.forEach(function(item) { upsertInventoryPlaceholder_(ss, item); });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** 依現有標題名稱寫入；同代號已存在時完全不覆寫實際庫存與公式。 */
+function upsertInventoryPlaceholder_(ss, item) {
+  var sheet = ss.getSheetByName('stock_inventory');
+  if (!sheet || sheet.getLastColumn() < 1) throw new Error('找不到 stock_inventory 或標題列');
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+  var codeIndex = headers.indexOf('stock_code');
+  var nameIndex = headers.indexOf('stock_name');
+  if (codeIndex < 0 || nameIndex < 0) throw new Error('stock_inventory 缺少 stock_code 或 stock_name 欄位');
+  var values = sheet.getLastRow() > 1 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues() : [];
+  if (values.some(function(row) { return String(row[codeIndex]).trim() === item.stockCode; })) return;
+  var row = headers.map(function(header) {
+    if (header === 'stock_code') return item.stockCode;
+    if (header === 'stock_name') return item.stockName;
+    if (['total_shares', 'avg_cost', 'total_investment', 'current_price', 'market_value', 'unrealized_pnl', 'roi'].indexOf(header) >= 0) return 0;
+    return '';
+  });
+  sheet.appendRow(row);
+  // 若既有庫存列使用公式取得即時股價、交易彙總或市值，沿用相同 R1C1 公式並自動調整列號。
+  var targetRow = sheet.getLastRow();
+  if (targetRow > 2) {
+    var formulas = sheet.getRange(targetRow - 1, 1, 1, headers.length).getFormulasR1C1()[0];
+    formulas.forEach(function(formula, index) {
+      if (formula && index !== codeIndex && index !== nameIndex) sheet.getRange(targetRow, index + 1).setFormulaR1C1(formula);
+    });
+  }
 }
 
 function upsertSetting_(sheet, key, value) {
