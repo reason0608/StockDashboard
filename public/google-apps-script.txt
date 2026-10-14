@@ -257,7 +257,10 @@ function saveGoalsToInventory_(ss, items) {
 
   lastRow = Math.max(sheet.getLastRow(), 1);
   values = lastRow > 1 ? sheet.getRange(2, 1, lastRow - 1, headers.length).getValues() : [];
-  if (values.length) sheet.getRange(2, goalIndex + 1, values.length, 1).setValue(false);
+  // 只有真正的庫存列寫 FALSE；空白預留列保持空白，避免 API 回傳大量空代號資料。
+  if (values.length) sheet.getRange(2, goalIndex + 1, values.length, 1).setValues(values.map(function(row) {
+    return [String(row[codeIndex] || '').trim() ? false : ''];
+  }));
   items.forEach(function(item) {
     values = sheet.getLastRow() > 1 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, headers.length).getValues() : [];
     var key = stockKey_(item.stockCode);
